@@ -131,6 +131,25 @@ $\star$**RLPD** (Sergey, 2023): Efficient Online Reinforcement Learning with Off
 **DGN** (Finn, 2025); Reinforcement Learning via Implicit Imitation Guidance, https://arxiv.org/pdf/2506.07505v1
 
 
+
+**Fisher-BRC** (Kostrikov, 2021); Offline Reinforcement Learning with Fisher Divergence Critic Regularization, https://arxiv.org/pdf/2103.08050v1
+
+**EDIS** (Liu, 2024); Energy-Guided Diffusion Sampling for Offline-to-Online Reinforcement Learning, https://arxiv.org/pdf/2407.12448v2
+
+**BPPO** (Zhuang, 2023); Behavior Proximal Policy Optimization, https://arxiv.org/pdf/2302.11312v1
+
+**SimBa** (Lee, 2024); Simplicity Bias for Scaling Up Parameters in Deep Reinforcement Learning, https://arxiv.org/pdf/2410.09754
+
+**SimBa2** (Lee, 2025); Hyperspherical Normalization for Scalable Deep Reinforcement Learning, https://arxiv.org/pdf/2502.15280v2
+
+**BRO** (Nauman, 2024); Bigger, Regularized, Optimistic: scaling for compute and sample-efficient continuous control, https://arxiv.org/pdf/2405.16158v3
+
+**A-LIX** (Cetin, 2022); Stabilizing Off-Policy Deep Reinforcement Learning from Pixels, https://arxiv.org/pdf/2207.00986v1
+
+**Norm-generalization-vrl** (Li, 2023); Normalization Enhances Generalization in Visual Reinforcement Learning, https://arxiv.org/pdf/2306.00656v1
+
+
+
 ## Environment Setup
 
 ```bash
