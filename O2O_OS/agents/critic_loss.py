@@ -131,12 +131,15 @@ def critic_loss(
                 # lagrange
                 cql_target_action_gap = critic_loss_config['cql']['cql_target_action_gap']
                 cql_alpha_prime = agent.network.select('cql_log_alpha_prime')(params = grad_params)
-                cql_alpha_prime = jnp.clip(jnp.exp(cql_alpha_prime), a_min=0.0, a_max=1000000.0)
-                # jax.debug.print("cql_alpha_prime: {}", cql_alpha_prime)
-                cql_q_diff = (cql_q_diff - cql_target_action_gap) * cql_alpha_prime
+                cql_alpha_prime = jnp.clip(jnp.exp(cql_alpha_prime), a_min=0.0, a_max=10.0)
+                alpha_loss = (jax.lax.stop_gradient(cql_q_diff - cql_target_action_gap) * cql_alpha_prime * batch['valid'][..., -1]).mean()
+                cql_loss_total += alpha_loss
 
-            cql_loss = (cql_q_diff * batch['valid'][..., -1]).mean()
-            cql_loss_total += cql_loss * cql_min_q_weight
+                cql_loss = (cql_q_diff * batch['valid'][..., -1]).mean() * cql_min_q_weight * jax.lax.stop_gradient(cql_alpha_prime)
+                cql_loss_total += cql_loss
+            else:
+                cql_loss = (cql_q_diff * batch['valid'][..., -1]).mean()
+                cql_loss_total += cql_loss * cql_min_q_weight
                 
     info = {}
 
