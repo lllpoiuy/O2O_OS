@@ -29,7 +29,7 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
 flags.DEFINE_string('replay_type', 'portional', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
-flags.DEFINE_integer('offline_steps', 1000000, 'Number of online steps.')
+flags.DEFINE_integer('offline_steps', 20000, 'Number of online steps.')
 flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
@@ -222,6 +222,9 @@ def main(_):
 
     # Online RL
     update_info = {}
+    if config["critic_loss"].get('cql', None) is not None:
+        config["critic_loss"]['cql']["cql_min_q_weight"] = config["critic_loss"]['cql'].get('cql_min_q_weight_online', -1.0)
+        print(f"Using CQL with min_q_weight: {config['critic_loss']['cql']['cql_min_q_weight']}", flush=True)
 
     from collections import defaultdict
     data = defaultdict(list)

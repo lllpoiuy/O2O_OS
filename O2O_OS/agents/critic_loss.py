@@ -55,7 +55,7 @@ def critic_loss(
             minval=-1.0, 
             maxval=1.0
         )
-        cql_random_logs = jnp.ones((cql_n_actions, batch['observations'].shape[0])) * jnp.log(0.5 ** action_dim)
+        cql_random_logs = jnp.ones((cql_n_actions, agent.config["num_qs"], batch['observations'].shape[0])) * jnp.log(0.5 ** action_dim)
         
         # Sample actions for CQL, 2: policy actions
         rng, policy_action_rng = jax.random.split(rng)
@@ -65,9 +65,10 @@ def critic_loss(
             for key in policy_action_keys
         ])
         policy_dist = agent.network.select('actor')(batch['observations'])        
-        cql_actions_logs = jnp.zeros((cql_n_actions, batch['observations'].shape[0]))
+        cql_actions_logs = jnp.zeros((cql_n_actions, agent.config["num_qs"], batch['observations'].shape[0]))
         for i, cql_action in enumerate(cql_actions):
-            cql_actions_logs = cql_actions_logs.at[i].set(policy_dist.log_prob(cql_action))
+            for j in range(agent.config["num_qs"]):
+                cql_actions_logs = cql_actions_logs.at[i, j].set(policy_dist.log_prob(cql_action))
 
         # Sample actions for CQL, 3: next obs actions
         rng, next_policy_action_rng = jax.random.split(rng)
@@ -77,9 +78,10 @@ def critic_loss(
             for key in next_policy_action_keys
         ])
         next_policy_dist = agent.network.select('actor')(batch['next_observations'][..., -1, :])        
-        cql_next_actions_logs = jnp.zeros((cql_n_actions, batch['observations'].shape[0]))
+        cql_next_actions_logs = jnp.zeros((cql_n_actions, agent.config["num_qs"], batch['observations'].shape[0]))
         for i, cql_next_action in enumerate(cql_next_actions):
-            cql_next_actions_logs = cql_next_actions_logs.at[i].set(next_policy_dist.log_prob(cql_next_action))
+            for j in range(agent.config["num_qs"]):
+                cql_next_actions_logs = cql_next_actions_logs.at[i, j].set(next_policy_dist.log_prob(cql_next_action))
 
         # Print shapes for debugging
         # print("cql_random_actions.shape:", cql_random_actions.shape)
@@ -111,6 +113,8 @@ def critic_loss(
             cql_next_actions_qs - cql_next_actions_logs
         ], axis=0)
 
+        # print("cql_cat_q.shape:", cql_cat_q.shape)
+
         cql_temperature = critic_loss_config['cql']['cql_temperature']
         cql_min_q_weight = critic_loss_config['cql']['cql_min_q_weight']
 
@@ -119,16 +123,22 @@ def critic_loss(
         for i in range(agent.config["num_qs"]):
             cql_i = cql_cat_q[:, i, :]
             cql_logsumexp = jax.scipy.special.logsumexp(cql_i / cql_temperature, axis=0) * cql_temperature
+            assert cql_logsumexp.shape == q[i].shape
             cql_q_diff = cql_logsumexp - q[i]
+
+            
+            if critic_loss_config['cql'].get('cql_target_action_gap', None) is not None:
+                # lagrange
+                cql_target_action_gap = critic_loss_config['cql']['cql_target_action_gap']
+                cql_alpha_prime = agent.network.select('cql_log_alpha_prime')(params = grad_params)
+                cql_alpha_prime = jnp.clip(jnp.exp(cql_alpha_prime), a_min=0.0, a_max=1000000.0)
+                # jax.debug.print("cql_alpha_prime: {}", cql_alpha_prime)
+                cql_q_diff = (cql_q_diff - cql_target_action_gap) * cql_alpha_prime
+
             cql_loss = (cql_q_diff * batch['valid'][..., -1]).mean()
             cql_loss_total += cql_loss * cql_min_q_weight
                 
-    info = {
-        'critic_loss': critic_loss,
-        'q_mean': q.mean(),
-        'q_max': q.max(),
-        'q_min': q.min(),
-    }
+    info = {}
 
     if critic_loss_config.get('cql', None) is not None:
         critic_loss = critic_loss + cql_loss_total
@@ -136,7 +146,15 @@ def critic_loss(
         info.update({
             'cql_loss': cql_loss_total,
             'cql_logsumexp': cql_logsumexp.mean(),
+            'cql_alpga_prime': cql_alpha_prime,
         })
         info['critic_loss'] = critic_loss
+                
+    info.update({
+        'critic_loss': critic_loss,
+        'q_mean': q.mean(),
+        'q_max': q.max(),
+        'q_min': q.min(),
+    })
         
     return critic_loss, info

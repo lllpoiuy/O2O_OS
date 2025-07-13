@@ -183,6 +183,11 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
 
         # Define the dual alpha variable.
         alpha_def = Temperature(config["actor_loss"]["init_temp"])
+        if config["critic_loss"].get("cql", None) is not None:
+            if config["critic_loss"]["cql"].get("cql_target_action_gap", None) is not None:
+                cql_alpha_def = Temperature(1.0)
+            else:
+                cql_alpha_def = None
 
         network_info = dict(
             critic=(critic_def, (ex_observations, full_actions)),
@@ -190,6 +195,8 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
             actor=(actor_def, (ex_observations,)),
             alpha=(alpha_def, ()),
         )
+        if cql_alpha_def is not None:
+            network_info['cql_log_alpha_prime'] = (cql_alpha_def, ())
         networks = {k: v[0] for k, v in network_info.items()}
         network_args = {k: v[1] for k, v in network_info.items()}
 

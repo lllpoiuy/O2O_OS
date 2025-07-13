@@ -42,7 +42,7 @@ def sac_bc(
 
     # Actor loss.
     qs = agent.network.select('critic')(batch['observations'], actions)
-    q = jnp.mean(qs, axis=0)
+    q = jnp.mean(qs, axis=0) if agent.config["critic_loss"]["q_agg"] == "mean" else jnp.min(qs, axis=0)
 
     actor_loss = (log_probs * agent.network.select('alpha')() - q).mean()
 
@@ -65,3 +65,4 @@ def sac_bc(
         'entropy': -log_probs.mean(),
         'q': q.mean(),
     }
+
