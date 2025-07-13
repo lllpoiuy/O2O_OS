@@ -12,6 +12,7 @@ Algorithms
   + cal-ql
   + rlpd
   + wsrl
+  + samg
 + diffusion-based methods
   + dppo
   + dsrl
@@ -156,6 +157,8 @@ $\star$**RLPD** (Sergey, 2023): Efficient Online Reinforcement Learning with Off
 **A-LIX** (Cetin, 2022); Stabilizing Off-Policy Deep Reinforcement Learning from Pixels, https://arxiv.org/pdf/2207.00986v1
 
 **Norm-generalization-vrl** (Li, 2023); Normalization Enhances Generalization in Visual Reinforcement Learning, https://arxiv.org/pdf/2306.00656v1
+
+**SAMG** (Zhang, 2024); Offline-to-Online Reinforcement Learning via State-Action-Conditional Offline Model Guidance, https://arxiv.org/pdf/2410.18626v2
 
 
 
