@@ -1,0 +1,29 @@
+{
+    "agent_name" : "sac_bc",
+    "lr" : 0.0003,
+    "batch_size" : 256,
+    "actor_hidden_dims": [512, 512, 512, 512],
+    "value_hidden_dims": [512, 512, 512, 512],
+    "critic_layer_norm": true,
+    "actor_layer_norm": false,
+    "discount": 0.99,
+    "tau": 0.005,
+    "target_update_interval": 1,
+    "num_qs": 10,
+    "action_chunking": true,
+    "horizon_length": null,
+
+    "actor_loss": {
+        "type": "sac_bc",
+        "target_entropy": null,
+        "target_entropy_multiplier": 1.0,
+        "alpha": 1.0,
+        "bc_alpha": 0.0,
+        "init_temp": 1.0
+    },
+
+    "critic_loss": {
+        "type": "sac",
+        "q_agg": "mean"
+    }
+}
