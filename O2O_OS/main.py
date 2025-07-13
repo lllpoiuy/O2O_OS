@@ -12,12 +12,13 @@ from utils.datasets import Dataset, ReplayBuffer
 
 from evaluation import evaluate
 # from agents import agents
-import agents
+from agents.agent import O2O_OS_Agent as agent_class
 import numpy as np
 
 if 'CUDA_VISIBLE_DEVICES' in os.environ:
     os.environ['EGL_DEVICE_ID'] = os.environ['CUDA_VISIBLE_DEVICES']
     os.environ['MUJOCO_EGL_DEVICE_ID'] = os.environ['CUDA_VISIBLE_DEVICES']
+
 
 FLAGS = flags.FLAGS
 
@@ -26,7 +27,9 @@ flags.DEFINE_integer('seed', 0, 'Random seed.')
 flags.DEFINE_string('env_name', 'cube-triple-play-singletask-task2-v0', 'Environment (dataset) name.')
 flags.DEFINE_string('save_dir', 'exp/', 'Save directory.')
 
-flags.DEFINE_integer('offline_steps', 1000000, 'Number of online steps.')
+flags.DEFINE_string('replay_type', 'portional', 'Replay buffer type: "portional", "mixed", or "online_only".')
+
+flags.DEFINE_integer('offline_steps', 000000, 'Number of online steps.')
 flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
 flags.DEFINE_integer('buffer_size', 2000000, 'Replay buffer size.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
@@ -67,7 +70,7 @@ class LoggingHelper:
 
 def main(_):
     exp_name = get_exp_name(FLAGS.seed)
-    run = setup_wandb(project='qx', group=FLAGS.run_group, name=exp_name)
+    run = setup_wandb(project='rainbow', group=FLAGS.run_group, name=exp_name)
     
     FLAGS.save_dir = os.path.join(FLAGS.save_dir, wandb.run.project, FLAGS.run_group, FLAGS.env_name, exp_name)
     os.makedirs(FLAGS.save_dir, exist_ok=True)
@@ -139,8 +142,6 @@ def main(_):
     train_dataset = process_train_dataset(train_dataset)
     example_batch = train_dataset.sample(())
     
-    # agent_class = agents[config['agent_name']]
-    agent_class = agents.agent.O2O_OS_Agent
     agent = agent_class.create(
         FLAGS.seed,
         example_batch['observations'],
@@ -204,9 +205,15 @@ def main(_):
             logger.log(eval_info, "eval", step=log_step)
 
     # transition from offline to online
-    replay_buffer = ReplayBuffer.create_from_initial_dataset(
-        dict(train_dataset), size=max(FLAGS.buffer_size, train_dataset.size + 1)
-    )
+    if FLAGS.replay_type == "portional":
+        replay_buffer = ReplayBuffer.create(example_batch, size=FLAGS.buffer_size)
+    elif FLAGS.replay_type == "mixed":
+        replay_buffer = ReplayBuffer.create_from_initial_dataset(
+            dict(train_dataset), size=max(FLAGS.buffer_size, train_dataset.size + 1)
+        )
+    elif FLAGS.replay_type == "online_only":
+        replay_buffer = ReplayBuffer.create(example_batch, size=FLAGS.buffer_size)
+
         
     ob, _ = env.reset()
     
@@ -225,7 +232,10 @@ def main(_):
         
         # during online rl, the action chunk is executed fully
         if len(action_queue) == 0:
-            action = agent.sample_actions(observations=ob, rng=key)
+            if FLAGS.offline_steps == 0 and i <= FLAGS.start_training:
+                action = jax.random.uniform(key, shape=(action_dim,), minval=-1, maxval=1)
+            else:
+                action = agent.sample_actions(observations=ob, rng=key)
 
             action_chunk = np.array(action).reshape(-1, action_dim)
             for action in action_chunk:
@@ -283,10 +293,16 @@ def main(_):
             ob = next_ob
 
         if i >= FLAGS.start_training:
-            batch = replay_buffer.sample_sequence(config['batch_size'] * FLAGS.utd_ratio, 
-                        sequence_length=FLAGS.horizon_length, discount=discount)
-            batch = jax.tree.map(lambda x: x.reshape((
-                FLAGS.utd_ratio, config["batch_size"]) + x.shape[1:]), batch)
+            if FLAGS.replay_type == "portional":
+                
+                dataset_batch = train_dataset.sample_sequence(config['batch_size'] // 2 * FLAGS.utd_ratio, sequence_length=FLAGS.horizon_length, discount=discount)
+                replay_batch = replay_buffer.sample_sequence(FLAGS.utd_ratio * config['batch_size'] // 2, sequence_length=FLAGS.horizon_length, discount=discount)
+                
+                batch = {k: np.concatenate([dataset_batch[k].reshape((FLAGS.utd_ratio, config["batch_size"] // 2) + dataset_batch[k].shape[1:]),  replay_batch[k].reshape((FLAGS.utd_ratio, config["batch_size"] // 2) + replay_batch[k].shape[1:])], axis=1) for k in dataset_batch}
+            elif FLAGS.replay_type == "mixed" or FLAGS.replay_type == "online_only":
+
+                batch = replay_buffer.sample_sequence(config['batch_size'] * FLAGS.utd_ratio, sequence_length=FLAGS.horizon_length, discount=discount)
+                batch = jax.tree.map(lambda x: x.reshape((FLAGS.utd_ratio, config["batch_size"]) + x.shape[1:]), batch)
 
             agent, update_info["online_agent"] = agent.batch_update(batch)
             
@@ -311,10 +327,23 @@ def main(_):
         if FLAGS.save_interval > 0 and i % FLAGS.save_interval == 0:
             save_agent(agent, FLAGS.save_dir, log_step)
 
-    end_time = time.time()
+        if FLAGS.replay_type == "portional" and FLAGS.ogbench_dataset_dir is not None and FLAGS.dataset_replace_interval != 0 and i % FLAGS.dataset_replace_interval == 0:
+            dataset_idx = (dataset_idx + 1) % len(dataset_paths)
+            print(f"Using new dataset: {dataset_paths[dataset_idx]}", flush=True)
+            train_dataset, val_dataset = make_ogbench_env_and_datasets(
+                FLAGS.env_name,
+                dataset_path=dataset_paths[dataset_idx],
+                compact_dataset=False,
+                dataset_only=True,
+                cur_env=env,
+            )
+            train_dataset = process_train_dataset(train_dataset)
+
 
     for key, csv_logger in logger.csv_loggers.items():
         csv_logger.close()
+
+    end_time = time.time()
 
     if FLAGS.save_all_online_states:
         c_data = {"steps": np.array(data["steps"]),

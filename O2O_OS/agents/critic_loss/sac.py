@@ -26,6 +26,7 @@ def critic_loss(
     rng, sample_rng = jax.random.split(rng)
 
     next_actions = agent.sample_actions(batch['next_observations'][..., -1, :], rng=sample_rng)
+    next_actions = jax.lax.stop_gradient(next_actions)
 
     next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], next_actions)
 

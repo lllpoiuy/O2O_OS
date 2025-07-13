@@ -125,6 +125,7 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         agent, infos = jax.lax.scan(self._update, self, batch)
         return agent, jax.tree_util.tree_map(lambda x: x.mean(), infos)
     
+    
     @jax.jit
     def sample_actions(
         self,
@@ -206,8 +207,11 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
 import ml_collections
 import json
 
+
 def get_config():
+    print("getting config...")
     with open('./agents/config.json', 'r') as f:
         config_dict = json.load(f)
+    print("Loaded config:", config_dict)
     config = ml_collections.ConfigDict(config_dict)
     return config
