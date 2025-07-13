@@ -3,7 +3,7 @@ from typing import Optional, Type
 
 import tensorflow_probability
 
-from rlpd_distributions.tanh_transformed import TanhTransformedDistribution
+from networks.rlpd_distributions.tanh_transformed import TanhTransformedDistribution
 
 tfp = tensorflow_probability.substrates.jax
 tfd = tfp.distributions
@@ -11,7 +11,7 @@ tfd = tfp.distributions
 import flax.linen as nn
 import jax.numpy as jnp
 
-from rlpd_networks import default_init
+from networks.rlpd_networks import default_init
 
 
 class Normal(nn.Module):

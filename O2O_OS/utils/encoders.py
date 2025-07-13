@@ -4,7 +4,7 @@ from typing import Sequence
 import flax.linen as nn
 import jax.numpy as jnp
 
-from utils.networks import MLP
+from O2O_OS.networks.networks import MLP
 
 
 class ResnetStack(nn.Module):

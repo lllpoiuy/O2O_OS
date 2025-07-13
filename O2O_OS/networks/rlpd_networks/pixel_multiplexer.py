@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 
-from rlpd_networks import default_init
+from networks.rlpd_networks import default_init
 
 
 class PixelMultiplexer(nn.Module):

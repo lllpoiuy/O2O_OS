@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 
 
-def actor_loss(
+def sac_bc(
         agent : flax.struct.PyTreeNode,
         batch : dict,
         grad_params : dict,

@@ -9,8 +9,8 @@ import optax
 from flax import linen as nn
 
 from utils.flax_utils import ModuleDict, TrainState, nonpytree_field
-from rlpd_networks import Ensemble, StateActionValue, MLP
-from rlpd_distributions import TanhNormal
+from networks.rlpd_networks import Ensemble, StateActionValue, MLP
+from networks.rlpd_distributions import TanhNormal
 
 from functools import partial
 
@@ -46,7 +46,7 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
             batch_actions = batch["actions"][..., 0, :]
         
         if self.config["critic_loss"]["type"] == "sac":
-            return agents.critic_loss.sac.critic_loss(
+            return agents.critic_loss.critic_loss(
                 agent=self,
                 batch=batch,
                 grad_params=grad_params,
@@ -64,7 +64,7 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
             batch_actions = batch["actions"][..., 0, :]
         
         if self.config["actor_loss"]["type"] == "sac_bc":
-            return agents.actor_loss.sac_bc.actor_loss(
+            return agents.actor_loss.sac_bc(
                 agent=self,
                 batch=batch,
                 grad_params=grad_params,

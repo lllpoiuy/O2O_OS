@@ -24,6 +24,11 @@
 
     "critic_loss": {
         "type": "sac",
-        "q_agg": "mean"
+        "q_agg": "mean",
+        "cql": {
+            "cql_n_actions": 10,
+            "cql_temperature": 1.0,
+            "cql_min_q_weight":5.0
+        }
     }
 }
