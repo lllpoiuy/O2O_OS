@@ -188,6 +188,8 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
                 cql_alpha_def = Temperature(1.0)
             else:
                 cql_alpha_def = None
+        else:
+            cql_alpha_def = None
 
         network_info = dict(
             critic=(critic_def, (ex_observations, full_actions)),

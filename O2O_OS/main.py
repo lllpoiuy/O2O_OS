@@ -29,7 +29,7 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
 flags.DEFINE_string('replay_type', 'portional', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
-flags.DEFINE_integer('offline_steps', 20000, 'Number of online steps.')
+flags.DEFINE_integer('offline_steps', 1000000, 'Number of online steps.')
 flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
