@@ -35,10 +35,13 @@ class Normal(nn.Module):
             )(x)
         else:
             log_stds = self.param(
-                "OutpuLogStd", nn.initializers.zeros, (self.action_dim,), jnp.float32
+                "OutpuLogStd", nn.initializers.zeros, (self.action_dim,), x.dtype
             )
 
         log_stds = jnp.clip(log_stds, self.log_std_min, self.log_std_max)
+
+        # means = jnp.asarray(means, jnp.float64)
+        # log_stds = jnp.asarray(log_stds, jnp.float64)
 
         distribution = tfd.MultivariateNormalDiag(
             loc=means, scale_diag=jnp.exp(log_stds)

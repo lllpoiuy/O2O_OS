@@ -1,31 +1,13 @@
-import copy
 from typing import Any
 
 import flax
 import jax
 import jax.numpy as jnp
 import ml_collections
-import optax
-from flax import linen as nn
 
-from utils.flax_utils import ModuleDict, TrainState, nonpytree_field
-from networks.rlpd_networks import Ensemble, StateActionValue, MLP
-from networks.rlpd_distributions import TanhNormal
-
-from functools import partial
+from utils.flax_utils import nonpytree_field
 
 import agents
-
-class Temperature(nn.Module):
-    initial_temperature: float = 1.0
-
-    @nn.compact
-    def __call__(self) -> jnp.ndarray:
-        log_temp = self.param(
-            "log_temp",
-            init_fn=lambda key: jnp.full((), jnp.log(self.initial_temperature)),
-        )
-        return jnp.exp(log_temp)
 
 
 class O2O_OS_Agent(flax.struct.PyTreeNode):
@@ -40,10 +22,7 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
 
     def critic_loss(self, batch, grad_params, rng):
         """Compute the SAC critic loss."""
-        if self.config["action_chunking"]:
-            batch_actions = jnp.reshape(batch["actions"], (batch["actions"].shape[0], -1))
-        else:
-            batch_actions = batch["actions"][..., 0, :]
+        batch_actions = jnp.reshape(batch["actions"], (batch["actions"].shape[0], -1))
         
         if self.config["critic_loss"]["type"] == "sac":
             return agents.critic_loss.critic_loss(
@@ -58,16 +37,22 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
     
     def actor_loss(self, batch, grad_params, rng):
         """Compute the SAC actor loss."""
-        if self.config["action_chunking"]:
-            batch_actions = jnp.reshape(batch["actions"], (batch["actions"].shape[0], -1))
-        else:
-            batch_actions = batch["actions"][..., 0, :]
+        batch_actions = jnp.reshape(batch["actions"], (batch["actions"].shape[0], -1))
         
         if self.config["actor_loss"]["type"] == "sac_bc":
             return agents.actor_loss.sac_bc(
                 agent=self,
                 batch=batch,
                 grad_params=grad_params,
+                batch_actions = batch_actions,
+                rng=rng
+            )
+        elif self.config["actor_loss"]["type"] == "flow_bc":
+            return agents.actor_loss.bc_flow(
+                agent=self,
+                batch=batch,
+                grad_params=grad_params,
+                batch_actions=batch_actions,
                 rng=rng
             )
         else:
@@ -133,10 +118,26 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         rng=None,
     ):
         """Sample actions from the actor."""
-        dist = self.network.select('actor')(observations)
-        actions = dist.sample(seed=rng)
-        actions = jnp.clip(actions, -1, 1)
-        return actions
+        if self.config["sample_actions"]["type"] == "gaussian":
+            return agents.sample_actions.sample_dist(
+                agent=self,
+                observations=observations,
+                rng=rng
+            )
+        elif self.config["sample_actions"]["type"] == "best_of_n":
+            return agents.sample_actions.sample_best_of_n(
+                agent=self,
+                observations=observations,
+                rng=rng
+            )
+        elif self.config["sample_actions"]["type"] == "distill_ddpg":
+            return agents.sample_actions.sample_distill_ddpg(
+                agent=self,
+                observations=observations,
+                rng=rng
+            )
+        else:
+            raise ValueError(f"Unknown sample actions type: {self.config['sample_actions']['type']}")
 
     @classmethod
     def create(
@@ -157,58 +158,22 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         rng = jax.random.PRNGKey(seed)
         rng, init_rng = jax.random.split(rng, 2)
 
-        action_dim = ex_actions.shape[-1]
-        if config["action_chunking"]:
-            full_actions = jnp.concatenate([ex_actions] * config["horizon_length"], axis=-1)
+        if config["create_network"]["type"] == "flow":
+            network = agents.create_network.create_flow_network(
+                config=config,
+                init_rng=init_rng,
+                ex_observations=ex_observations,
+                ex_actions=ex_actions,
+            )
+        elif config["create_network"]["type"] == "normal":
+            network = agents.create_network.create_normal_network(
+                config=config,
+                init_rng=init_rng,
+                ex_observations=ex_observations,
+                ex_actions=ex_actions,
+            )
         else:
-            full_actions = ex_actions
-        full_action_dim = full_actions.shape[-1]
-
-        if config["actor_loss"]['target_entropy'] is None:
-            config["actor_loss"]['target_entropy'] = -config["actor_loss"]['target_entropy_multiplier'] * full_action_dim
-
-        # Define networks
-        critic_base_cls = partial(
-            MLP,
-            hidden_dims=config['value_hidden_dims'],
-            activate_final=True,
-            use_layer_norm=config["critic_layer_norm"],
-        )
-        critic_cls = partial(StateActionValue, base_cls=critic_base_cls)
-        critic_def = Ensemble(critic_cls, num=config["num_qs"])
-
-
-        actor_base_cls = partial(MLP, hidden_dims=config["actor_hidden_dims"], activate_final=True)
-        actor_def = TanhNormal(actor_base_cls, full_action_dim)
-
-        # Define the dual alpha variable.
-        alpha_def = Temperature(config["actor_loss"]["init_temp"])
-        if config["critic_loss"].get("cql", None) is not None:
-            if config["critic_loss"]["cql"].get("cql_target_action_gap", None) is not None:
-                cql_alpha_def = Temperature(1.0)
-            else:
-                cql_alpha_def = None
-        else:
-            cql_alpha_def = None
-
-        network_info = dict(
-            critic=(critic_def, (ex_observations, full_actions)),
-            target_critic=(copy.deepcopy(critic_def), (ex_observations, full_actions)),
-            actor=(actor_def, (ex_observations,)),
-            alpha=(alpha_def, ()),
-        )
-        if cql_alpha_def is not None:
-            network_info['cql_log_alpha_prime'] = (cql_alpha_def, ())
-        networks = {k: v[0] for k, v in network_info.items()}
-        network_args = {k: v[1] for k, v in network_info.items()}
-
-        network_def = ModuleDict(networks)
-        network_tx = optax.adam(learning_rate=config['lr'])
-        network_params = network_def.init(init_rng, **network_args)['params']
-        network = TrainState.create(network_def, network_params, tx=network_tx)
-
-        params = network.params
-        params['modules_target_critic'] = params['modules_critic']
+            raise ValueError(f"Unknown create network type: {config['create_network']['type']}")
 
         return cls(rng, network=network, config=flax.core.FrozenDict(**config))
 

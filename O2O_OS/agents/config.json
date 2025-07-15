@@ -10,27 +10,30 @@
     "tau": 0.005,
     "target_update_interval": 1,
     "num_qs": 2,
-    "action_chunking": true,
     "horizon_length": null,
 
     "actor_loss": {
-        "type": "sac_bc",
-        "target_entropy": null,
-        "target_entropy_multiplier": 1.0,
-        "alpha": 1.0,
-        "bc_alpha": 0.0,
-        "init_temp": 1.0
+        "type": "flow_bc",
+        "alpha": 1.0
     },
 
     "critic_loss": {
         "type": "sac",
         "q_agg": "mean",
-        "cql": {
-            "cql_n_actions": 10,
-            "cql_temperature": 1.0,
-            "cql_min_q_weight": 5.0,
-            "cql_min_q_weight_online": -1.0,
-            "cql_target_action_gap": null
-        }
-    }
+        "cql": null
+    },
+
+    "sample_actions":{
+        "type": "distill_ddpg"
+    },
+
+    
+    "create_network": {
+        "type": "flow",
+        "flow_steps": 10,
+        "use_fourier_features": false,
+        "fourier_feature_dim": 64
+    },
+
+    "encoder" : null
 }

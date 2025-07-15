@@ -20,6 +20,9 @@ if 'CUDA_VISIBLE_DEVICES' in os.environ:
     os.environ['MUJOCO_EGL_DEVICE_ID'] = os.environ['CUDA_VISIBLE_DEVICES']
 
 
+# from jax import config
+# config.update("jax_enable_x64", True)
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('run_group', 'Debug', 'Run group.')

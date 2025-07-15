@@ -2,6 +2,7 @@ import flax
 import jax
 import jax.numpy as jnp
 
+# reshape issue: batch['valid]?
 
 def critic_loss(
         agent : flax.struct.PyTreeNode,
@@ -23,6 +24,11 @@ def critic_loss(
     assert agent.network.select('target_critic') is not None
     critic_loss_config = agent.config["critic_loss"]
 
+    batch_valid = batch['valid'][..., 0]
+    for i in range(1, agent.config["horizon_length"]):
+        batch_valid = batch_valid * batch['valid'][..., i]
+            
+
     rng, sample_rng = jax.random.split(rng)
 
     next_actions = agent.sample_actions(batch['next_observations'][..., -1, :], rng=sample_rng)
@@ -38,7 +44,7 @@ def critic_loss(
     target_q = batch['rewards'][..., -1] + (agent.config['discount'] ** agent.config["horizon_length"]) * batch['masks'][..., -1] * next_q
     
     q = agent.network.select('critic')(batch['observations'], batch_actions, params=grad_params)
-    critic_loss = (jnp.square(q - target_q) * batch['valid'][..., -1]).mean()
+    critic_loss = (jnp.square(q - target_q) * batch_valid).mean()
 
     # print("q.shape:", q.shape)
 
@@ -52,10 +58,12 @@ def critic_loss(
         cql_random_actions = jax.random.uniform(
             random_action_rng, 
             shape=(cql_n_actions, batch['observations'].shape[0], action_dim),
-            minval=-1.0 + 1e-5, 
-            maxval=1.0 - 1e-5
+            minval=-1.0 + 1e-5,
+            maxval=1.0 - 1e-5,
         )
-        cql_random_logs = jnp.ones((cql_n_actions, agent.config["num_qs"], batch['observations'].shape[0])) * jnp.log(0.5 ** action_dim)
+        cql_random_actions_qs = jnp.stack([
+            agent.network.select('critic')(batch['observations'], random_action, params=grad_params) for random_action in cql_random_actions
+        ])
         
         # Sample actions for CQL, 2: policy actions
         rng, policy_action_rng = jax.random.split(rng)
@@ -64,11 +72,9 @@ def critic_loss(
             agent.sample_actions(batch['observations'], rng=key)
             for key in policy_action_keys
         ])
-        policy_dist = agent.network.select('actor')(batch['observations'])        
-        cql_actions_logs = jnp.zeros((cql_n_actions, agent.config["num_qs"], batch['observations'].shape[0]))
-        for i, cql_action in enumerate(cql_actions):
-            for j in range(agent.config["num_qs"]):
-                cql_actions_logs = cql_actions_logs.at[i, j].set(jax.lax.stop_gradient(jnp.clip(policy_dist.log_prob(cql_action), a_min=-20.0, a_max=2.0)))
+        cql_actions_qs = jnp.stack([
+            agent.network.select('critic')(batch['observations'], policy_action, params=grad_params) for policy_action in cql_actions
+        ])
 
         # Sample actions for CQL, 3: next obs actions
         rng, next_policy_action_rng = jax.random.split(rng)
@@ -77,48 +83,16 @@ def critic_loss(
             agent.sample_actions(batch['next_observations'][..., -1, :], rng=key)
             for key in next_policy_action_keys
         ])
-        next_policy_dist = agent.network.select('actor')(batch['next_observations'][..., -1, :])        
-        cql_next_actions_logs = jnp.zeros((cql_n_actions, agent.config["num_qs"], batch['observations'].shape[0]))
-        for i, cql_next_action in enumerate(cql_next_actions):
-            for j in range(agent.config["num_qs"]):
-                cql_next_actions_logs = cql_next_actions_logs.at[i, j].set(jax.lax.stop_gradient(jnp.clip(next_policy_dist.log_prob(cql_next_action), a_min=-20.0, a_max=2.0)))
-
-        # Print shapes for debugging
-        # print("cql_random_actions.shape:", cql_random_actions.shape)
-        # print("cql_actions.shape:", cql_actions.shape)
-        # print("cql_next_actions.shape:", cql_next_actions.shape)
-        # print("cql_random_logs.shape:", cql_random_logs.shape)
-        # print("cql_actions_logs.shape:", cql_actions_logs.shape)
-        # print("cql_next_actions_logs.shape:", cql_next_actions_logs.shape)
-
-        # Evaluate Q-values for all sampled actions
-        cql_random_actions_qs = jnp.stack([
-            jnp.clip(agent.network.select('critic')(batch['observations'], random_action, params=grad_params), a_min=-10.0, a_max=10.0) for random_action in cql_random_actions
-        ])
-        cql_actions_qs = jnp.stack([
-            jnp.clip(agent.network.select('critic')(batch['observations'], policy_action, params=grad_params), a_min=-10.0, a_max=10.0) for policy_action in cql_actions
-        ])
         cql_next_actions_qs = jnp.stack([
-            jnp.clip(agent.network.select('critic')(batch['observations'], next_action, params=grad_params), a_min=-10.0, a_max=10.0) for next_action in cql_next_actions
+            agent.network.select('critic')(batch['observations'], next_action, params=grad_params) for next_action in cql_next_actions
         ])
 
-        # print("cql_random_actions_qs.shape:", cql_random_actions_qs.shape)
-        # print("cql_actions_qs.shape:", cql_actions_qs.shape)
-        # print("cql_next_actions_qs.shape:", cql_next_actions_qs.shape)
 
-        # Combine all Q-values and compute logsumexp
         cql_cat_q = jnp.concatenate([
-            cql_random_actions_qs - cql_random_logs,
-            cql_actions_qs - cql_actions_logs,
-            cql_next_actions_qs - cql_next_actions_logs
+            cql_random_actions_qs,
+            cql_actions_qs,
+            cql_next_actions_qs,
         ], axis=0)
-        # cql_cat_q = jnp.concatenate([
-        #     cql_random_actions_qs,
-        #     cql_actions_qs,
-        #     cql_next_actions_qs
-        # ], axis=0)
-
-        # print("cql_cat_q.shape:", cql_cat_q.shape)
 
         cql_temperature = critic_loss_config['cql']['cql_temperature']
         cql_min_q_weight = critic_loss_config['cql']['cql_min_q_weight']
@@ -133,17 +107,26 @@ def critic_loss(
 
             
             if critic_loss_config['cql'].get('cql_target_action_gap', None) is not None:
-                # lagrange
+                # lagrange def
                 cql_target_action_gap = critic_loss_config['cql']['cql_target_action_gap']
                 cql_alpha_prime = agent.network.select('cql_log_alpha_prime')(params = grad_params)
                 cql_alpha_prime = jnp.clip(jnp.exp(cql_alpha_prime), a_min=0.0, a_max=10.0)
-                alpha_loss = -(jax.lax.stop_gradient(cql_q_diff - cql_target_action_gap) * cql_alpha_prime * batch['valid'][..., -1]).mean() * cql_min_q_weight
-                cql_loss_total += alpha_loss
 
-                cql_loss = (cql_q_diff * batch['valid'][..., -1]).mean() * cql_min_q_weight * jax.lax.stop_gradient(cql_alpha_prime)
-                cql_loss_total += cql_loss
+                print("shape of cql_q_diff:", cql_q_diff.shape)
+                print("shape of cql_alpha_prime:", cql_alpha_prime.shape)
+                print("shape of batch['valid']:", batch['valid'].shape)
+                print("shape of batch_valid:", batch_valid.shape)
+
+                # alpha loss
+                alpha_loss = -(jax.lax.stop_gradient(cql_q_diff - cql_target_action_gap) * cql_alpha_prime * batch_valid).mean() * cql_min_q_weight
+                cql_loss_total += alpha_loss / cql_n_actions
+
+                # cql loss
+                cql_loss = (cql_q_diff * batch_valid).mean() * cql_min_q_weight * jax.lax.stop_gradient(cql_alpha_prime)
+                cql_loss_total += cql_loss / cql_n_actions
             else:
-                cql_loss = (cql_q_diff * batch['valid'][..., -1]).mean()
+                # cql loss
+                cql_loss = (cql_q_diff * batch_valid).mean()
                 cql_loss_total += cql_loss * cql_min_q_weight
                 
     info = {}
