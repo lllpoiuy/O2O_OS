@@ -30,7 +30,7 @@ flags.DEFINE_integer('seed', 0, 'Random seed.')
 flags.DEFINE_string('env_name', 'cube-triple-play-singletask-task2-v0', 'Environment (dataset) name.')
 flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
-flags.DEFINE_string('replay_type', 'portional', 'Replay buffer type: "portional", "mixed", or "online_only".')
+flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
 flags.DEFINE_integer('offline_steps', 1000000, 'Number of online steps.')
 flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')

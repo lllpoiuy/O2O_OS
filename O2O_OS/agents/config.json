@@ -14,7 +14,7 @@
 
     "actor_loss": {
         "type": "flow_bc",
-        "alpha": 1.0
+        "alpha": 100.0
     },
 
     "critic_loss": {
@@ -24,7 +24,8 @@
     },
 
     "sample_actions":{
-        "type": "distill_ddpg"
+        "type": "distill_ddpg",
+        "OBAC_weight": 3.0
     },
 
     
