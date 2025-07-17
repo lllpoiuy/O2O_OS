@@ -95,23 +95,43 @@ def sample_distill_ddpg(
         rng : dict,
     ) -> tuple:
     """
-    Sample actions using the distill DDPG method.
+    Sample actions using the distill DDPG method with best-of-N sampling.
     Example config:
     "sample_actions":{
-        "type": "distill_ddpg"
+        "type": "distill_ddpg",
+        "actor_num_samples": 10
     }
     """
     assert agent.network.select('actor_onestep_flow') is not None
     assert agent.network.select('critic') is not None
-
+    assert agent.config['sample_actions'].get('actor_num_samples') is not None
+    
+    action_dim = agent.config['action_dim'] * agent.config['horizon_length']
+    num_samples = agent.config['sample_actions']['actor_num_samples']
+    
     noises = jax.random.normal(
         rng,
         (
-            *observations.shape[: -len(agent.config['ob_dims'])],  # batch_size
-            agent.config['action_dim'] * agent.config['horizon_length']
+            *observations.shape[: -len(agent.config['ob_dims'])],
+            num_samples, action_dim
         ),
     )
-    actions = agent.network.select(f'actor_onestep_flow')(observations, noises)
+    
+    observations_repeated = jnp.repeat(observations[..., None, :], num_samples, axis=-2)
+    
+    actions = agent.network.select('actor_onestep_flow')(observations_repeated, noises)
     actions = jnp.clip(actions, -1, 1)
+    
+    if agent.config["critic_loss"]["q_agg"] == "mean":
+        q = agent.network.select("critic")(observations_repeated, actions).mean(axis=0)
+    else:
+        q = agent.network.select("critic")(observations_repeated, actions).min(axis=0)
+    
+    indices = jnp.argmax(q, axis=-1)
+    
+    bshape = indices.shape
+    indices = indices.reshape(-1)
+    bsize = len(indices)
+    actions = jnp.reshape(actions, (-1, num_samples, action_dim))[jnp.arange(bsize), indices, :].reshape(bshape + (action_dim,))
     
     return actions
