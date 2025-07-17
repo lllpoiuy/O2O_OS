@@ -106,6 +106,8 @@ def bc_flow(
 
     if actor_loss_config.get("OBAC", None) is not None and actor_loss_config["OBAC"] > 0:
 
+        print("OBAC enabled, computing OBAC loss.")
+
         now_noise = jax.random.normal(n_rng, (batch_size, action_dim))
         now_action = agents.sample_actions.compute_flow_actions(
             agent,

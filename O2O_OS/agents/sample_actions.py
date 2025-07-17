@@ -54,7 +54,8 @@ def sample_best_of_n(
     Example config:
     "sample_actions":{
         "type": "best_of_n",
-        "actor_num_samples": 32
+        "actor_num_samples": 32,
+        "soft_max": true
     }
     """
     assert agent.network.select('actor_bc_flow') is not None
@@ -78,7 +79,12 @@ def sample_best_of_n(
         q = agent.network.select("critic")(observations, actions).mean(axis=0)
     else:
         q = agent.network.select("critic")(observations, actions).min(axis=0)
-    indices = jnp.argmax(q, axis=-1)
+
+    if agent.config['sample_actions'].get('soft_max', False):
+        q = jax.nn.softmax(q, axis=-1)
+        indices = jax.random.categorical(rng, q, axis=-1)
+    else:
+        indices = jnp.argmax(q, axis=-1)
 
     bshape = indices.shape
     indices = indices.reshape(-1)
@@ -127,7 +133,11 @@ def sample_distill_ddpg(
     else:
         q = agent.network.select("critic")(observations_repeated, actions).min(axis=0)
     
-    indices = jnp.argmax(q, axis=-1)
+    if agent.config['sample_actions'].get('soft_max', False):
+        q = jax.nn.softmax(q, axis=-1)
+        indices = jax.random.categorical(rng, q, axis=-1)
+    else:
+        indices = jnp.argmax(q, axis=-1)
     
     bshape = indices.shape
     indices = indices.reshape(-1)
