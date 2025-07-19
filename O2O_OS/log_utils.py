@@ -5,7 +5,7 @@ from datetime import datetime
 import absl.flags as flags
 import ml_collections
 import numpy as np
-import wandb
+import swanlab
 from PIL import Image, ImageEnhance
 import glob
 
@@ -16,7 +16,7 @@ class CsvLogger:
         self.path = path
         self.header = None
         self.file = None
-        self.disallowed_types = (wandb.Image, wandb.Video, wandb.Histogram)
+        self.disallowed_types = (swanlab.Image, swanlab.Video)
 
     def log(self, row, step):
         row['step'] = step
@@ -63,7 +63,7 @@ def get_flag_dict():
     return flag_dict
 
 
-def setup_wandb(
+def setup_swanlab(
     entity=None,
     project='project',
     group=None,
@@ -71,7 +71,7 @@ def setup_wandb(
     mode='online',
 ):
     """Set up Weights & Biases for logging."""
-    wandb_output_dir = tempfile.mkdtemp()
+    swanlab_output_dir = tempfile.mkdtemp()
     tags = [group] if group is not None else None
 
     init_kwargs = dict(
@@ -80,20 +80,43 @@ def setup_wandb(
         entity=entity,
         tags=tags,
         group=group,
-        dir=wandb_output_dir,
+        dir=swanlab_output_dir,
         name=name,
-        settings=wandb.Settings(
+        settings=swanlab.Settings(
             start_method='thread',
             _disable_stats=False,
         ),
         mode=mode,
     )
 
-    run = wandb.init(**init_kwargs)
+    run = swanlab.init(**init_kwargs)
 
     # assume a flat structure
-    run.save('*.py')
-    run.save('**/*.py')
+    # swanlab.log_artifact(
+    #     path="./agents/config.json",
+    #     name="config"
+    # )
+    # swanlab.log_artifact(
+    #     path="./agents/create_network.py",
+    #     name="create_network"
+    # )
+    # swanlab.log_artifact(
+    #     path="./agents/actor_loss.py",
+    #     name="actor_loss"
+    # )
+    # swanlab.log_artifact(
+    #     path="./agents/sample_actions.py",
+    #     name="sample_actions"
+    # )
+    # swanlab.log_artifact(
+    #     path="./agents/agent.py",
+    #     name="agent"
+    # )
+    # swanlab.log_artifact(
+    #     path="./main.py",
+    #     name="main"
+    # )
+
 
     return run
 
@@ -120,7 +143,7 @@ def reshape_video(v, n_cols=None):
     return v
 
 
-def get_wandb_video(renders=None, n_cols=None, fps=15):
+def get_swanlab_video(renders=None, n_cols=None, fps=15):
     """Return a Weights & Biases video.
 
     It takes a list of videos and reshapes them into a single video with the specified number of columns.
@@ -150,4 +173,4 @@ def get_wandb_video(renders=None, n_cols=None, fps=15):
 
     renders = reshape_video(renders, n_cols)  # (t, c, nr * h, nc * w)
 
-    return wandb.Video(renders, fps=fps, format='mp4')
+    return swanlab.Video(renders, fps=fps, format='mp4')

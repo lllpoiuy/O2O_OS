@@ -155,10 +155,14 @@ def bc_flow(
         q_loss = -q.mean()
 
         actor_loss += distill_loss * actor_loss_config["alpha"] + q_loss
-
-    return actor_loss, {
+    
+    metrics = {
         'total_loss': actor_loss,
         'actor_loss': actor_loss,
-        'bc_flow_loss': bc_flow_loss,
-        'obac_rate': obac_rate,
+        'bc_flow_loss': jnp.mean(bc_flow_loss)
     }
+    if obac_rate is not None:
+        metrics['obac_rate'] = obac_rate
+
+
+    return actor_loss, metrics

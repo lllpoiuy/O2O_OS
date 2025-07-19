@@ -1,7 +1,7 @@
-import glob, tqdm, wandb, os, json, random, time, jax
+import glob, tqdm, swanlab, os, json, random, time, jax
 from absl import app, flags
 from ml_collections import config_flags
-from log_utils import setup_wandb, get_exp_name, get_flag_dict, CsvLogger
+from log_utils import setup_swanlab, get_exp_name, get_flag_dict, CsvLogger
 
 from envs.env_utils import make_env_and_datasets
 from envs.ogbench_utils import make_ogbench_env_and_datasets
@@ -32,15 +32,15 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
 flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
-flags.DEFINE_integer('offline_steps', 1000000, 'Number of online steps.')
-flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
+flags.DEFINE_integer('offline_steps', 110000, 'Number of online steps.')
+flags.DEFINE_integer('online_steps', 110000, 'Number of online steps.')
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 100000, 'Evaluation interval.')
 flags.DEFINE_integer('save_interval', -1, 'Save interval.')
 flags.DEFINE_integer('start_training', 5000, 'when does training start')
 
-flags.DEFINE_integer('utd_ratio', 3, "update to data ratio")
+flags.DEFINE_integer('utd_ratio', 1, "update to data ratio")
 
 flags.DEFINE_float('discount', 0.99, 'discount factor')
 
@@ -60,22 +60,22 @@ flags.DEFINE_bool('sparse', False, "make the task sparse reward")
 flags.DEFINE_bool('save_all_online_states', False, "save all trajectories to npy")
 
 class LoggingHelper:
-    def __init__(self, csv_loggers, wandb_logger):
+    def __init__(self, csv_loggers, swanlab_logger):
         self.csv_loggers = csv_loggers
-        self.wandb_logger = wandb_logger
+        self.swanlab_logger = swanlab_logger
         self.first_time = time.time()
         self.last_time = time.time()
 
     def log(self, data, prefix, step):
         assert prefix in self.csv_loggers, prefix
         self.csv_loggers[prefix].log(data, step=step)
-        self.wandb_logger.log({f'{prefix}/{k}': v for k, v in data.items()}, step=step)
+        self.swanlab_logger.log({f'{prefix}/{k}': v for k, v in data.items()}, step=step)
 
 def main(_):
     exp_name = get_exp_name(FLAGS.seed)
-    run = setup_wandb(project='rainbow', group=FLAGS.run_group, name=exp_name)
+    run = setup_swanlab(project='rainbow', group=FLAGS.run_group, name=exp_name)
     
-    FLAGS.save_dir = os.path.join(FLAGS.save_dir, wandb.run.project, FLAGS.run_group, FLAGS.env_name, exp_name)
+    FLAGS.save_dir = os.path.join(FLAGS.save_dir, FLAGS.run_group, FLAGS.env_name, exp_name)
     os.makedirs(FLAGS.save_dir, exist_ok=True)
     flag_dict = get_flag_dict()
 
@@ -162,7 +162,7 @@ def main(_):
     logger = LoggingHelper(
         csv_loggers={prefix: CsvLogger(os.path.join(FLAGS.save_dir, f"{prefix}.csv")) 
                     for prefix in prefixes},
-        wandb_logger=wandb,
+        swanlab_logger=swanlab,
     )
 
     offline_init_time = time.time()
