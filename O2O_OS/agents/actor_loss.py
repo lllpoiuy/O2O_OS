@@ -110,11 +110,15 @@ def bc_flow(
 
         print("OBAC enabled, computing OBAC loss.")
 
-        now_noise = jax.random.normal(n_rng, (batch_size, action_dim))
-        now_action = agents.sample_actions.compute_flow_actions(
-            agent,
+        # now_noise = jax.random.normal(n_rng, (batch_size, action_dim))
+        # now_action = agents.sample_actions.compute_flow_actions(
+        #     agent,
+        #     batch['observations'],
+        #     noises=now_noise,
+        # )
+        now_action = agent.sample_actions(
             batch['observations'],
-            noises=now_noise,
+            rng=n_rng,
         )
         now_action = jnp.clip(now_action, -1 + 1e-5, 1 - 1e-5)
         q_now = agent.network.select('critic')(batch['observations'], actions=now_action)

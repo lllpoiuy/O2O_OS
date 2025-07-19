@@ -32,13 +32,13 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
 flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
-flags.DEFINE_integer('offline_steps', 110000, 'Number of online steps.')
-flags.DEFINE_integer('online_steps', 110000, 'Number of online steps.')
+flags.DEFINE_integer('offline_steps', 1000000, 'Number of online steps.')
+flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 100000, 'Evaluation interval.')
 flags.DEFINE_integer('save_interval', -1, 'Save interval.')
-flags.DEFINE_integer('start_training', 5000, 'when does training start')
+flags.DEFINE_integer('start_training', 20000, 'when does training start')
 
 flags.DEFINE_integer('utd_ratio', 1, "update to data ratio")
 
@@ -305,6 +305,7 @@ def main(_):
                 replay_batch = replay_buffer.sample_sequence(FLAGS.utd_ratio * config['batch_size'] // 2, sequence_length=FLAGS.horizon_length, discount=discount)
                 
                 batch = {k: np.concatenate([dataset_batch[k].reshape((FLAGS.utd_ratio, config["batch_size"] // 2) + dataset_batch[k].shape[1:]),  replay_batch[k].reshape((FLAGS.utd_ratio, config["batch_size"] // 2) + replay_batch[k].shape[1:])], axis=1) for k in dataset_batch}
+            
             elif FLAGS.replay_type == "mixed" or FLAGS.replay_type == "online_only":
 
                 batch = replay_buffer.sample_sequence(config['batch_size'] * FLAGS.utd_ratio, sequence_length=FLAGS.horizon_length, discount=discount)
@@ -363,8 +364,8 @@ def main(_):
             c_data["button_states"] = np.stack(data["button_states"], axis=0)
         np.savez(os.path.join(FLAGS.save_dir, "data.npz"), **c_data)
 
-    with open(os.path.join(FLAGS.save_dir, 'token.tk'), 'w') as f:
-        f.write(run.url)
+    # with open(os.path.join(FLAGS.save_dir, 'token.tk'), 'w') as f:
+    #     f.write(run.url)
 
 if __name__ == '__main__':
     app.run(main)
