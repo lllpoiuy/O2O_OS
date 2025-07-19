@@ -104,6 +104,8 @@ def bc_flow(
     
     q_batch = agent.network.select('critic')(batch['observations'], actions=batch_actions)
 
+    obac_rate = None
+
     if actor_loss_config.get("OBAC", None) is not None and actor_loss_config["OBAC"] > 0:
 
         print("OBAC enabled, computing OBAC loss.")
@@ -126,6 +128,7 @@ def bc_flow(
 
         mask = (q_batch > q_now)[..., None, None]
         bc_flow_loss = bc_flow_loss + (bc_flow_loss * mask) * actor_loss_config["OBAC"]
+        obac_rate = jnp.mean(mask)
 
     actor_loss = jnp.mean(bc_flow_loss)
 
@@ -157,4 +160,5 @@ def bc_flow(
         'total_loss': actor_loss,
         'actor_loss': actor_loss,
         'bc_flow_loss': bc_flow_loss,
+        'obac_rate': obac_rate,
     }

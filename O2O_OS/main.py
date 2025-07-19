@@ -40,7 +40,7 @@ flags.DEFINE_integer('eval_interval', 100000, 'Evaluation interval.')
 flags.DEFINE_integer('save_interval', -1, 'Save interval.')
 flags.DEFINE_integer('start_training', 5000, 'when does training start')
 
-flags.DEFINE_integer('utd_ratio', 1, "update to data ratio")
+flags.DEFINE_integer('utd_ratio', 3, "update to data ratio")
 
 flags.DEFINE_float('discount', 0.99, 'discount factor')
 

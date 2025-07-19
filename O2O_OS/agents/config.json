@@ -9,7 +9,7 @@
     "discount": 0.99,
     "tau": 0.005,
     "target_update_interval": 1,
-    "num_qs": 2,
+    "num_qs": 3,
     "horizon_length": null,
 
     "actor_loss": {
