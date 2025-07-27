@@ -9,12 +9,13 @@
     "discount": 0.99,
     "tau": 0.005,
     "target_update_interval": 1,
-    "num_qs": 2,
+    "num_qs": 10,
     "horizon_length": null,
 
     "actor_loss": {
         "type": "flow_bc",
-        "alpha": 1.0
+        "alpha": 100.0,
+        "OBAC": 10.0
     },
 
     "critic_loss": {
@@ -24,7 +25,10 @@
     },
 
     "sample_actions":{
-        "type": "distill_ddpg"
+        "type": "distill_ddpg",
+        "actor_num_samples": 32,
+        "soft_max": true,
+        "imitation_boostrapped": true
     },
 
     

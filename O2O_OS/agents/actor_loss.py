@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 
 import agents
+import agents.sample_actions
 
 def sac_bc(
         agent : flax.struct.PyTreeNode,
@@ -85,7 +86,7 @@ def bc_flow(
     actor_loss_config = agent.config["actor_loss"]
 
     batch_size, action_dim = batch_actions.shape
-    rng, x_rng, t_rng = jax.random.split(rng, 3)
+    rng, x_rng, t_rng, n_rng = jax.random.split(rng, 4)
 
     # BC flow loss.
     x_0 = jax.random.normal(x_rng, (batch_size, action_dim))
@@ -96,14 +97,44 @@ def bc_flow(
 
     pred = agent.network.select('actor_bc_flow')(batch['observations'], x_t, t, params=grad_params)
 
-    bc_flow_loss = jnp.mean(
-        jnp.reshape(
+    bc_flow_loss = jnp.reshape(
             (pred - vel) ** 2, 
             (batch_size, agent.config["horizon_length"], agent.config["action_dim"]) 
         ) * batch["valid"][..., None]
-    )
+    
+    q_batch = agent.network.select('critic')(batch['observations'], actions=batch_actions)
 
-    actor_loss = bc_flow_loss
+    obac_rate = None
+
+    if actor_loss_config.get("OBAC", None) is not None and actor_loss_config["OBAC"] > 0:
+
+        print("OBAC enabled, computing OBAC loss.")
+
+        # now_noise = jax.random.normal(n_rng, (batch_size, action_dim))
+        # now_action = agents.sample_actions.compute_flow_actions(
+        #     agent,
+        #     batch['observations'],
+        #     noises=now_noise,
+        # )
+        now_action = agent.sample_actions(
+            batch['observations'],
+            rng=n_rng,
+        )
+        now_action = jnp.clip(now_action, -1 + 1e-5, 1 - 1e-5)
+        q_now = agent.network.select('critic')(batch['observations'], actions=now_action)
+
+        if agent.config['critic_loss']['q_agg'] == 'mean':
+            q_batch = jnp.mean(q_batch, axis=0)
+            q_now = jnp.mean(q_now, axis=0)
+        else:
+            q_batch = jnp.min(q_batch, axis=0)
+            q_now = jnp.min(q_now, axis=0)
+
+        mask = (q_batch > q_now)[..., None, None]
+        bc_flow_loss = bc_flow_loss + (bc_flow_loss * mask) * actor_loss_config["OBAC"]
+        obac_rate = jnp.mean(mask)
+
+    actor_loss = jnp.mean(bc_flow_loss)
 
     if agent.config["sample_actions"]["type"] == "distill_ddpg":
         assert agent.network.select('actor_onestep_flow') is not None
@@ -128,9 +159,14 @@ def bc_flow(
         q_loss = -q.mean()
 
         actor_loss += distill_loss * actor_loss_config["alpha"] + q_loss
-
-    return actor_loss, {
+    
+    metrics = {
         'total_loss': actor_loss,
         'actor_loss': actor_loss,
-        'bc_flow_loss': bc_flow_loss,
+        'bc_flow_loss': jnp.mean(bc_flow_loss)
     }
+    if obac_rate is not None:
+        metrics['obac_rate'] = obac_rate
+
+
+    return actor_loss, metrics

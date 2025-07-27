@@ -1,2 +1,5 @@
 O2O_OS/exp
 exp/
+__pycache__/
+**/__pycache__/
+**/swanlog/
