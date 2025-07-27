@@ -1,0 +1,219 @@
+from typing import Dict
+
+import numpy as np
+from flax.training import checkpoints
+
+# from O2O_OS.agents.base_agent import AgentWrapper, BaseAgent
+from O2O_OS.agents.wrappers.utils import RunningMeanStd
+
+import flax
+import os
+import pickle
+from typing import Any, Dict
+import jax
+import jax.numpy as jnp
+
+
+@flax.struct.dataclass
+class NormalizedAgent:
+    """
+    A wrapper that normalizes observations for an underlying SAC agent.
+    - Updates running statistics only during sampling if training=True.
+    - Always normalizes obs in both sample_actions and update().
+    """
+    agent: Any                        # instance of O2O_OS_Agent
+    obs_rms: RunningMeanStd           # observation statistics
+    epsilon: float = flax.struct.field(pytree_node=False, default=1e-8)
+    load_rms: bool = flax.struct.field(pytree_node=False, default=True)
+
+    def _normalize(self, obs: np.ndarray) -> np.ndarray:
+        """(obs - mean) / sqrt(var + epsilon)."""
+        return (obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + self.epsilon)
+
+    def sample_actions(
+        self,
+        observations: np.ndarray,
+        rng: jax.random.PRNGKey,
+        training: bool = False,
+    ) -> ("NormalizedAgent", np.ndarray):
+        """
+        Normalize observations, update stats if training, then delegate to agent.
+        Returns new wrapper (with updated stats) and actions.
+        """
+        # 1. Optionally update running stats on raw numpy observations
+        if training:
+            self.obs_rms.update(observations)
+
+        # 2. Normalize and convert to jax array
+        norm_obs = jnp.asarray(self._normalize(observations))
+
+        # 3. Delegate to the underlying agent
+        actions = self.agent.sample_actions(norm_obs, rng=rng)
+
+        # 4. Return updated wrapper and actions
+        return self.replace(agent=self.agent), actions
+
+    def update(
+        self,
+        batch: Dict[str, np.ndarray]
+    ) -> ("NormalizedAgent", Dict[str, Any]):
+        """
+        Normalize batch observations before calling agent.update().
+        Expects keys "observations" and "next_observations".
+        """
+        # 1. Copy and normalize in numpy
+        batch = batch.copy()
+        batch["observations"]      = self._normalize(batch["observations"])
+        batch["next_observations"] = self._normalize(batch["next_observations"])
+
+        # 2. Convert to jax arrays
+        jax_batch = {k: jnp.asarray(v) for k, v in batch.items()}
+
+        # 3. Delegate update to underlying agent
+        new_agent, info = self.agent.update(jax_batch)
+
+        # 4. Wrap and return
+        return self.replace(agent=new_agent), info
+
+    def save(self, path: str) -> None:
+        """
+        Save both the underlying agent and the running stats.
+        Underlying agent uses its own save(); stats go to path/obs_norm/rms.pkl.
+        """
+        # 1. Save agent checkpoint
+        self.agent.save(path)
+
+        # 2. Serialize RunningMeanStd
+        os.makedirs(path + "/obs_norm", exist_ok=True)
+        with open(path + "/obs_norm/rms.pkl", "wb") as f:
+            pickle.dump({
+                "mean": self.obs_rms.mean,
+                "var":  self.obs_rms.var,
+                "count": self.obs_rms.count,
+            }, f)
+
+    def load(self, path: str) -> "NormalizedAgent":
+        """
+        Load underlying agent and, if load_rms=True, reload stats from disk.
+        """
+        # 1. Reload agent
+        self.agent = self.agent.load(path)
+
+        # 2. Optionally reload obs statistics
+        if self.load_rms:
+            with open(path + "/obs_norm/rms.pkl", "rb") as f:
+                ckpt = pickle.load(f)
+            self.obs_rms.mean = ckpt["mean"]
+            self.obs_rms.var   = ckpt["var"]
+            self.obs_rms.count = ckpt["count"]
+
+        return self
+
+
+# class RewardNormalizer(AgentWrapper):
+#     """
+#     This wrapper will scale rewards using the variance of a running estimate of the discounted returns.
+#     In policy gradient methods, the update rule often involves the term ∇log ⁡π(a|s)⋅G_t, where G_t is the return from time t.
+#     Scaling G_t to have unit variance can be an effective variance reduction technique.
+
+#     Return statistics is updated only on sample_actions with training == True
+#     """
+
+#     def __init__(
+#         self,
+#         agent: BaseAgent,
+#         gamma: float,
+#         g_max: float = 10.0,
+#         load_rms: bool = True,
+#         epsilon: float = 1e-8,
+#     ):
+#         AgentWrapper.__init__(self, agent)
+#         self.G = 0.0  # running estimate of the discounted return
+#         self.G_rms = RunningMeanStd(
+#             shape=1,
+#             dtype=np.float32,
+#         )
+#         self.G_r_max = 0.0  # running-max
+#         self.gamma = gamma
+#         self.g_max = g_max
+#         self.load_rms = load_rms
+#         self.epsilon = epsilon
+
+#     def _scale_reward(self, rewards):
+#         var_denominator = np.sqrt(self.G_rms.var + self.epsilon)
+#         min_required_denominator = self.G_r_max / self.g_max
+#         denominator = max(var_denominator, min_required_denominator)
+
+#         return rewards / denominator
+
+#     def sample_actions(
+#         self,
+#         interaction_step: int,
+#         prev_timestep: Dict[str, np.ndarray],
+#         training: bool,
+#     ) -> np.ndarray:
+#         """
+#         Defines the sample action function with updating statistics.
+#         """
+#         if training:
+#             reward = prev_timestep["reward"]
+#             terminated = prev_timestep["terminated"]
+#             truncated = prev_timestep["truncated"]
+#             done = np.logical_or(terminated, truncated)
+#             self.G = self.gamma * (1 - done) * self.G + reward
+#             self.G_rms.update(self.G)
+#             self.G_r_max = max(self.G_r_max, max(abs(self.G)))
+
+#         return self.agent.sample_actions(
+#             interaction_step=interaction_step,
+#             prev_timestep=prev_timestep,
+#             training=training,
+#         )
+
+#     def update(self, update_step: int, batch: Dict[str, np.ndarray]):
+#         batch["reward"] = self._scale_reward(batch["reward"])
+#         return self.agent.update(
+#             update_step=update_step,
+#             batch=batch,
+#         )
+
+#     def save(self, path: str) -> None:
+#         """
+#         Save both the wrapped agent and this wrapper's running statistics.
+#         """
+#         # 1. Save the underlying agent’s checkpoint
+#         self.agent.save(path)
+
+#         # 2. Save the wrapper’s statistics in a separate file
+#         ckpt = {
+#             "G": self.G,
+#             "G_rms_mean": self.G_rms.mean,
+#             "G_rms_var": self.G_rms.var,
+#             "G_rms_count": self.G_rms.count,
+#             "G_r_max": self.G_r_max,
+#         }
+#         checkpoints.save_checkpoint(
+#             ckpt_dir=path + "/rew_norm",
+#             target=ckpt,
+#             step=0,
+#             overwrite=True,
+#             keep=1,
+#         )
+
+#     def load(self, path: str):
+#         """
+#         Load both the wrapped agent and the wrapper’s running statistics.
+#         """
+#         # 1. Load the underlying agent
+#         self.agent.load(path)
+
+#         # 2. Load the wrapper’s statistics
+#         if self.load_rms:
+#             ckpt = checkpoints.restore_checkpoint(
+#                 ckpt_dir=path + "/rew_norm", target=None
+#             )
+#             self.G = ckpt["G"]
+#             self.G_rms.mean = ckpt["G_rms_mean"]
+#             self.G_rms.var = ckpt["G_rms_var"]
+#             self.G_rms.count = ckpt["G_rms_count"]
+#             self.G_r_max = ckpt["G_r_max"]

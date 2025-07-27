@@ -13,6 +13,7 @@ from utils.datasets import Dataset, ReplayBuffer
 from evaluation import evaluate
 # from agents import agents
 from agents.agent import O2O_OS_Agent as agent_class
+from agents.wrappers.normalization import NormalizedAgent
 import numpy as np
 
 if 'CUDA_VISIBLE_DEVICES' in os.environ:
@@ -145,7 +146,7 @@ def main(_):
     train_dataset = process_train_dataset(train_dataset)
     example_batch = train_dataset.sample(())
     
-    agent = agent_class.create(
+    agent = agent_class.create(  # [NOTE] create the agent here.
         FLAGS.seed,
         example_batch['observations'],
         example_batch['actions'],
@@ -184,7 +185,7 @@ def main(_):
 
         batch = train_dataset.sample_sequence(config['batch_size'], sequence_length=FLAGS.horizon_length, discount=discount)
 
-        agent, offline_info = agent.update(batch)
+        agent, offline_info = agent.update(batch)  # [NOTE] agent offline update here!
 
         if i % FLAGS.log_interval == 0:
             logger.log(offline_info, "offline_agent", step=log_step)
@@ -218,7 +219,7 @@ def main(_):
         replay_buffer = ReplayBuffer.create(example_batch, size=FLAGS.buffer_size)
 
         
-    ob, _ = env.reset()
+    ob, _ = env.reset()  # [NOTE] in online stage, agent start to interact with environment
     
     action_queue = []
     action_dim = example_batch["actions"].shape[-1]
@@ -268,6 +269,7 @@ def main(_):
         # always log this at every step
         logger.log(env_info, "env", step=log_step)
 
+        # [NOTE] adjust reward based on environment type
         if 'antmaze' in FLAGS.env_name and (
             'diverse' in FLAGS.env_name or 'play' in FLAGS.env_name or 'umaze' in FLAGS.env_name
         ):
