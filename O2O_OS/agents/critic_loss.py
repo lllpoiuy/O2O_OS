@@ -16,7 +16,15 @@ def critic_loss(
     Example config:
     "critic_loss": {
         "type": "sac",
-        "q_agg": "mean"
+        "q_agg": "mean",
+        "cql": {
+            "cql_n_actions": 10,
+            "cql_temperature": 1,
+            "cql_min_q_weight": 5.0,
+            "cql_min_q_weight_online": 0.0,
+            "cql_target_action_gap": 1.0,
+            "cql_log_alpha_prime": 1.0
+        }
     }
     """
 
@@ -65,33 +73,33 @@ def critic_loss(
             agent.network.select('critic')(batch['observations'], random_action, params=grad_params) for random_action in cql_random_actions
         ])
         
-        # Sample actions for CQL, 2: policy actions
-        rng, policy_action_rng = jax.random.split(rng)
-        policy_action_keys = jax.random.split(policy_action_rng, cql_n_actions)
-        cql_actions = jnp.stack([
-            agent.sample_actions(batch['observations'], rng=key)
-            for key in policy_action_keys
-        ])
-        cql_actions_qs = jnp.stack([
-            agent.network.select('critic')(batch['observations'], policy_action, params=grad_params) for policy_action in cql_actions
-        ])
+        # # Sample actions for CQL, 2: policy actions
+        # rng, policy_action_rng = jax.random.split(rng)
+        # policy_action_keys = jax.random.split(policy_action_rng, cql_n_actions)
+        # cql_actions = jnp.stack([
+        #     agent.sample_actions(batch['observations'], rng=key)
+        #     for key in policy_action_keys
+        # ])
+        # cql_actions_qs = jnp.stack([
+        #     agent.network.select('critic')(batch['observations'], policy_action, params=grad_params) for policy_action in cql_actions
+        # ])
 
-        # Sample actions for CQL, 3: next obs actions
-        rng, next_policy_action_rng = jax.random.split(rng)
-        next_policy_action_keys = jax.random.split(next_policy_action_rng, cql_n_actions)
-        cql_next_actions = jnp.stack([
-            agent.sample_actions(batch['next_observations'][..., -1, :], rng=key)
-            for key in next_policy_action_keys
-        ])
-        cql_next_actions_qs = jnp.stack([
-            agent.network.select('critic')(batch['observations'], next_action, params=grad_params) for next_action in cql_next_actions
-        ])
+        # # Sample actions for CQL, 3: next obs actions
+        # rng, next_policy_action_rng = jax.random.split(rng)
+        # next_policy_action_keys = jax.random.split(next_policy_action_rng, cql_n_actions)
+        # cql_next_actions = jnp.stack([
+        #     agent.sample_actions(batch['next_observations'][..., -1, :], rng=key)
+        #     for key in next_policy_action_keys
+        # ])
+        # cql_next_actions_qs = jnp.stack([
+        #     agent.network.select('critic')(batch['observations'], next_action, params=grad_params) for next_action in cql_next_actions
+        # ])
 
 
         cql_cat_q = jnp.concatenate([
             cql_random_actions_qs,
-            cql_actions_qs,
-            cql_next_actions_qs,
+            # cql_actions_qs,
+            # cql_next_actions_qs,
         ], axis=0)
 
         cql_temperature = critic_loss_config['cql']['cql_temperature']
