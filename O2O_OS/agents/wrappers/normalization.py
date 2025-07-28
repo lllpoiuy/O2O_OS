@@ -12,6 +12,8 @@ import pickle
 from typing import Any, Dict
 import jax
 import jax.numpy as jnp
+from functools import partial
+from jax.typing import ArrayLike
 
 
 class NormalizedAgent:
@@ -21,14 +23,25 @@ class NormalizedAgent:
 
     It maintains running mean and variance in `obs_rms`.
     """
-    def __init__(self, agent: Any, obs_shape: tuple, epsilon: float = 1e-8):
+    def __init__(self, agent: Any, obs_shape: tuple, epsilon: float = 1e-8, obs_rms=None):
         self.agent = agent
-        self.obs_rms = RunningMeanStd(shape=obs_shape)
+        self.obs_rms = obs_rms if obs_rms is not None else RunningMeanStd(shape=obs_shape)
         self.epsilon = epsilon
-
-    def _normalize(self, obs: np.ndarray) -> np.ndarray:
+    
+    def _normalize(self, obs: ArrayLike) -> jax.Array:
         """Normalize observations with (obs - mean) / sqrt(var + epsilon)."""
-        return (obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + self.epsilon)
+        mean = jnp.asarray(self.obs_rms.mean)
+        var = jnp.asarray(self.obs_rms.var)
+        return (obs - mean) / jnp.sqrt(var + self.epsilon)
+    
+    def replace(self, *, agent=None, obs_rms=None):
+        """Return a new NormalizedAgent with updated fields."""
+        return NormalizedAgent(
+            agent=agent if agent is not None else self.agent,
+            obs_shape=self.obs_rms.mean.shape,
+            epsilon=self.epsilon,
+            obs_rms=obs_rms if obs_rms is not None else self.obs_rms,
+        )
 
     def sample_actions(
         self,
@@ -51,17 +64,18 @@ class NormalizedAgent:
             self.obs_rms.update(observations)
 
         normalized = self._normalize(observations)
-        norm_jax = jnp.asarray(normalized)
-        actions = self.agent.sample_actions(norm_jax, rng=rng)
+        actions = self.agent.sample_actions(normalized, rng=rng)
         return actions
 
     @staticmethod
-    def _update(agent, batch):
+    def _update(wrapper, batch):
         batch = batch.copy()
-        obs = np.array(batch["observations"])
-        next_obs = np.array(batch["next_observations"])
-        batch["observations"]      = jnp.asarray(agent._normalize(obs))
-        batch["next_observations"] = jnp.asarray(agent._normalize(next_obs))
+        obs = jnp.asarray(batch["observations"])
+        next_obs = jnp.asarray(batch["next_observations"])
+        batch["observations"] = wrapper._normalize(obs)
+        batch["next_observations"] = wrapper._normalize(next_obs)
+        
+        agent = wrapper.agent
         
         new_rng, rng = jax.random.split(agent.rng)
         def loss_fn(grad_params):
@@ -69,12 +83,13 @@ class NormalizedAgent:
         
         new_network, info = agent.network.apply_loss_fn(loss_fn=loss_fn)
         agent.target_update(new_network, 'critic')
+        agent = agent.replace(network=new_network, rng=new_rng)
         
-        return agent.replace(network=new_network, rng=new_rng), info
+        return wrapper.replace(agent=agent), info
     
-    @jax.jit
+    @partial(jax.jit, static_argnums=0)
     def update(self, batch):
-        return self._update(self.agent, batch)
+        return self._update(self, batch)
     
     @jax.jit
     def batch_update(self, batch):

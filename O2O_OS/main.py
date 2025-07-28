@@ -33,13 +33,13 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
 flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
-flags.DEFINE_integer('offline_steps', 1000000, 'Number of online steps.')
-flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
+flags.DEFINE_integer('offline_steps', 300000, 'Number of online steps.')  # [*1000000, 300000]
+flags.DEFINE_integer('online_steps', 300000, 'Number of online steps.')   # [*1000000, 300000]
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
-flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
-flags.DEFINE_integer('eval_interval', 100000, 'Evaluation interval.')
+flags.DEFINE_integer('log_interval', 1500, 'Logging interval.')            # [*5000, 1500]
+flags.DEFINE_integer('eval_interval', 30000, 'Evaluation interval.')      # [*100000, 30000]
 flags.DEFINE_integer('save_interval', -1, 'Save interval.')
-flags.DEFINE_integer('start_training', 20000, 'when does training start')
+flags.DEFINE_integer('start_training', 6000, 'when does training start')  # [*20000, 6000]
 
 flags.DEFINE_integer('utd_ratio', 1, "update to data ratio")
 
@@ -152,6 +152,11 @@ def main(_):
         example_batch['actions'],
         config,
     )
+    
+    # print(f"---What!?---, config['RSNorm']={config['RSNorm']}")
+    if config['RSNorm']:
+        # print(f"---What!?---, config['RSNorm']={config['RSNorm']}")
+        agent = NormalizedAgent(agent, example_batch['observations'].shape)
 
     # Setup logging.
     prefixes = ["eval", "env"]
