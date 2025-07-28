@@ -46,7 +46,7 @@ def compute_flow_actions(
 def sample_best_of_n(
         agent : flax.struct.PyTreeNode,
         observations : dict,
-        rng : dict,
+        rng : dict
     ) -> tuple:
 
     """
