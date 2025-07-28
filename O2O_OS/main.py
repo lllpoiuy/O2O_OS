@@ -156,7 +156,12 @@ def main(_):
     # print(f"---What!?---, config['RSNorm']={config['RSNorm']}")
     if config['RSNorm']:
         # print(f"---What!?---, config['RSNorm']={config['RSNorm']}")
-        agent = NormalizedAgent(agent, example_batch['observations'].shape)
+        obs_shape = example_batch['observations'].shape
+        agent = NormalizedAgent.create(
+            agent=agent,
+            obs_shape=obs_shape,
+            epsilon=1e-8
+        )
 
     # Setup logging.
     prefixes = ["eval", "env"]
@@ -247,7 +252,7 @@ def main(_):
             if FLAGS.offline_steps == 0 and i <= FLAGS.start_training:
                 action = jax.random.uniform(key, shape=(action_dim,), minval=-1, maxval=1)
             else:
-                action = agent.sample_actions(observations=ob, rng=key)
+                action = agent.sample_actions(observations=ob, rng=key, training=True)
 
             action_chunk = np.array(action).reshape(-1, action_dim)
             for action in action_chunk:

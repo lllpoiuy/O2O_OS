@@ -14,87 +14,97 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 from jax.typing import ArrayLike
+from flax import struct
 
-
+@struct.dataclass
 class NormalizedAgent:
     """
-    A stateful wrapper that always normalizes observations before
-    forwarding to an underlying O2O_OS_Agent.
-
-    It maintains running mean and variance in `obs_rms`.
+    A Flax PyTreeNode wrapper that normalizes observations before
+    forwarding to an underlying O2O_OS_Agent. Supports full jit on update.
     """
-    def __init__(self, agent: Any, obs_shape: tuple, epsilon: float = 1e-8, obs_rms=None):
-        self.agent = agent
-        self.obs_rms = obs_rms if obs_rms is not None else RunningMeanStd(shape=obs_shape)
-        self.epsilon = epsilon
+    agent: Any
+    obs_rms: Any = struct.field(pytree_node=False)  # running mean/var not traced by JAX
+    epsilon: float = 1e-8
     
-    def _normalize(self, obs: ArrayLike) -> jax.Array:
-        """Normalize observations with (obs - mean) / sqrt(var + epsilon)."""
+    def __hash__(self):
+        """
+        Custom hash to avoid hashing JAX arrays inside agent.
+        Use object id to ensure hashability without touching array contents.
+        """
+        return hash(id(self))
+
+    @classmethod
+    def create(cls, agent: Any, obs_shape: tuple, epsilon: float = 1e-8):
+        """
+        Factory method to initialize a new NormalizedAgent with default RunningMeanStd.
+        """
+        from agents.wrappers.normalization import RunningMeanStd
+        rms = RunningMeanStd(shape=obs_shape)
+        return cls(agent=agent, obs_rms=rms, epsilon=epsilon)
+
+    def _normalize(self, obs: jnp.ndarray) -> jnp.ndarray:
+        """Normalize observations: (obs - mean) / sqrt(var + epsilon)."""
         mean = jnp.asarray(self.obs_rms.mean)
         var = jnp.asarray(self.obs_rms.var)
         return (obs - mean) / jnp.sqrt(var + self.epsilon)
-    
-    def replace(self, *, agent=None, obs_rms=None):
-        """Return a new NormalizedAgent with updated fields."""
-        return NormalizedAgent(
-            agent=agent if agent is not None else self.agent,
-            obs_shape=self.obs_rms.mean.shape,
-            epsilon=self.epsilon,
-            obs_rms=obs_rms if obs_rms is not None else self.obs_rms,
-        )
-
-    def sample_actions(
-        self,
-        observations: np.ndarray,
-        rng: jax.random.PRNGKey,
-        training: bool = False,
-    ) -> np.ndarray:
-        """
-        Normalize and update stats (if training), then call agent.sample_actions.
-
-        Args:
-            observations: raw numpy array of observations.
-            rng: JAX random key.
-            training: whether to update running statistics.
-
-        Returns:
-            actions produced by the underlying agent.
-        """
-        if training:
-            self.obs_rms.update(observations)
-
-        normalized = self._normalize(observations)
-        actions = self.agent.sample_actions(normalized, rng=rng)
-        return actions
 
     @staticmethod
     def _update(wrapper, batch):
+        """
+        Static update function: normalizes batch, applies agent update,
+        and returns new wrapper plus info dict.
+        """
+        # Copy batch to avoid in-place mutation
         batch = batch.copy()
+        # Convert observations to JAX arrays and normalize
         obs = jnp.asarray(batch["observations"])
         next_obs = jnp.asarray(batch["next_observations"])
         batch["observations"] = wrapper._normalize(obs)
         batch["next_observations"] = wrapper._normalize(next_obs)
-        
+
+        # Delegate update to underlying agent
         agent = wrapper.agent
-        
         new_rng, rng = jax.random.split(agent.rng)
+
         def loss_fn(grad_params):
             return agent.total_loss(batch, grad_params, rng=rng)
-        
+
         new_network, info = agent.network.apply_loss_fn(loss_fn=loss_fn)
         agent.target_update(new_network, 'critic')
-        agent = agent.replace(network=new_network, rng=new_rng)
-        
-        return wrapper.replace(agent=agent), info
-    
+        new_agent = agent.replace(network=new_network, rng=new_rng)
+
+        # Return updated wrapper and info
+        return wrapper.replace(agent=new_agent), info
+
     @partial(jax.jit, static_argnums=0)
     def update(self, batch):
+        """Full jitted update: returns (new_wrapper, info)."""
         return self._update(self, batch)
-    
-    @jax.jit
+
+    @partial(jax.jit, static_argnums=0)
+    def sample_actions(
+        self,
+        observations: jnp.ndarray,
+        rng: jax.random.PRNGKey,
+        training: bool = False,
+    ) -> jnp.ndarray:
+        """
+        Normalize and update stats (if training), then sample actions.
+        """
+        # Update running stats on Python side only
+        if training:
+            self.obs_rms.update(observations)
+
+        normalized = self._normalize(observations)
+        return self.agent.sample_actions(normalized, rng=rng)
+
+    @partial(jax.jit, static_argnums=0)
     def batch_update(self, batch):
-        """Update the agent and return a new agent with information dictionary."""
-        # update_size = batch["observations"].shape[0]
-        agent, infos = jax.lax.scan(self._update, self.agent, batch)
-        return agent, jax.tree_util.tree_map(lambda x: x.mean(), infos)
-    
+        """
+        Jitted batch update using lax.scan over _update.
+        Returns (new_wrapper, averaged_info).
+        """
+        # Use scan to apply _update repeatedly over batch entries
+        wrapper, infos = jax.lax.scan(self._update, self, batch)
+        mean_info = jax.tree_util.tree_map(lambda x: x.mean(), infos)
+        return wrapper, mean_info

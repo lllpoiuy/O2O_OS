@@ -116,6 +116,7 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         self,
         observations,
         rng=None,
+        training: bool = False,
     ):
         """Sample actions from the actor."""
         if self.config["sample_actions"]["type"] == "gaussian":
