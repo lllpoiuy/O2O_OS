@@ -15,30 +15,27 @@ import jax.numpy as jnp
 from functools import partial
 from jax.typing import ArrayLike
 from flax import struct
+from utils.flax_utils import nonpytree_field
 
-@struct.dataclass
-class NormalizedAgent:
+class NormalizedAgent(flax.struct.PyTreeNode):
     """
-    A Flax PyTreeNode wrapper that normalizes observations before
-    forwarding to an underlying O2O_OS_Agent. Supports full jit on update.
+    A PyTreeNode wrapper that normalizes observations before forwarding to
+    an underlying O2O_OS_Agent. Supports full jit on update without custom hashing.
     """
     agent: Any
-    obs_rms: Any = struct.field(pytree_node=False)  # running mean/var not traced by JAX
-    epsilon: float = 1e-8
+    obs_rms: Any = nonpytree_field()  # running mean/var not traced by JAX
+    epsilon: float = nonpytree_field()
     
     def __hash__(self):
-        """
-        Custom hash to avoid hashing JAX arrays inside agent.
-        Use object id to ensure hashability without touching array contents.
-        """
-        return hash(id(self))
+        # Use object identity hash as a fallback to avoid hashing JAX arrays
+        return id(self)
 
     @classmethod
     def create(cls, agent: Any, obs_shape: tuple, epsilon: float = 1e-8):
         """
         Factory method to initialize a new NormalizedAgent with default RunningMeanStd.
         """
-        from agents.wrappers.normalization import RunningMeanStd
+        # Initialize RunningMeanStd with zeros/ones
         rms = RunningMeanStd(shape=obs_shape)
         return cls(agent=agent, obs_rms=rms, epsilon=epsilon)
 
@@ -51,23 +48,21 @@ class NormalizedAgent:
     @staticmethod
     def _update(wrapper, batch):
         """
-        Static update function: normalizes batch, applies agent update,
-        and returns new wrapper plus info dict.
+        Static update: normalize batch, apply agent update, return new wrapper and info.
         """
-        # Copy batch to avoid in-place mutation
-        batch = batch.copy()
-        # Convert observations to JAX arrays and normalize
-        obs = jnp.asarray(batch["observations"])
-        next_obs = jnp.asarray(batch["next_observations"])
-        batch["observations"] = wrapper._normalize(obs)
-        batch["next_observations"] = wrapper._normalize(next_obs)
+        batch = batch.copy()  # avoid in-place mutation
+        # Normalize observations
+        obs = jnp.asarray(batch['observations'])
+        next_obs = jnp.asarray(batch['next_observations'])
+        batch['observations'] = wrapper._normalize(obs)
+        batch['next_observations'] = wrapper._normalize(next_obs)
 
-        # Delegate update to underlying agent
+        # Delegate to underlying agent
         agent = wrapper.agent
         new_rng, rng = jax.random.split(agent.rng)
 
-        def loss_fn(grad_params):
-            return agent.total_loss(batch, grad_params, rng=rng)
+        def loss_fn(params):
+            return agent.total_loss(batch, params, rng=rng)
 
         new_network, info = agent.network.apply_loss_fn(loss_fn=loss_fn)
         agent.target_update(new_network, 'critic')
@@ -76,12 +71,24 @@ class NormalizedAgent:
         # Return updated wrapper and info
         return wrapper.replace(agent=new_agent), info
 
-    @partial(jax.jit, static_argnums=0)
+    # @partial(jax.jit, static_argnums=0)
+    @jax.jit
     def update(self, batch):
-        """Full jitted update: returns (new_wrapper, info)."""
+        """Jitted update: returns (new_wrapper, info)."""
         return self._update(self, batch)
 
-    @partial(jax.jit, static_argnums=0)
+    # @partial(jax.jit, static_argnums=0)
+    @jax.jit
+    def batch_update(self, batch):
+        """
+        Jitted batch update using lax.scan. Returns (new_wrapper, averaged_info).
+        """
+        wrapper, infos = jax.lax.scan(self._update, self, batch)
+        mean_info = jax.tree_util.tree_map(lambda x: x.mean(), infos)
+        return wrapper, mean_info
+
+    # @partial(jax.jit, static_argnums=0)
+    @jax.jit
     def sample_actions(
         self,
         observations: jnp.ndarray,
@@ -89,22 +96,11 @@ class NormalizedAgent:
         training: bool = False,
     ) -> jnp.ndarray:
         """
-        Normalize and update stats (if training), then sample actions.
+        Normalize and optionally update stats, then sample actions.
         """
-        # Update running stats on Python side only
         if training:
+            # Update running stats on Python side
             self.obs_rms.update(observations)
 
         normalized = self._normalize(observations)
         return self.agent.sample_actions(normalized, rng=rng)
-
-    @partial(jax.jit, static_argnums=0)
-    def batch_update(self, batch):
-        """
-        Jitted batch update using lax.scan over _update.
-        Returns (new_wrapper, averaged_info).
-        """
-        # Use scan to apply _update repeatedly over batch entries
-        wrapper, infos = jax.lax.scan(self._update, self, batch)
-        mean_info = jax.tree_util.tree_map(lambda x: x.mean(), infos)
-        return wrapper, mean_info

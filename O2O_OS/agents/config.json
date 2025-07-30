@@ -11,7 +11,7 @@
     "target_update_interval": 1,
     "num_qs": 10,
     "horizon_length": null,
-    "RSNorm": true,
+    "RSNorm": false,
 
     "actor_loss": {
         "type": "flow_bc",

@@ -93,7 +93,6 @@ def create_normal_network(
     
     return network
 
-    return network
 
 def create_flow_network(
     config,
