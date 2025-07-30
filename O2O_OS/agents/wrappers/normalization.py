@@ -89,7 +89,7 @@ class NormalizedAgent(flax.struct.PyTreeNode):
 
     # @partial(jax.jit, static_argnums=0)
     # @jax.jit
-    @partial(jax.jit, static_argnames=['training'])
+    # @partial(jax.jit, static_argnames=['training'])
     def sample_actions(
         self,
         observations: jnp.ndarray,
