@@ -207,4 +207,5 @@ pip install ogbench opt_einsum pillow platformdirs opt_einsum pillow platformdir
 conda install cmake
 pip install robomimic
 
+pip install "shimmy[gym-v21]"
 ```
