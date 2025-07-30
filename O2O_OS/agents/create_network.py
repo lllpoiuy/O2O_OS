@@ -90,8 +90,9 @@ def create_normal_network(
 
     params = network.params
     params['modules_target_critic'] = params['modules_critic']
-
+    
     return network
+
 
 def create_flow_network(
     config,

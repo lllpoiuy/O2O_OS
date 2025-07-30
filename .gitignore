@@ -2,5 +2,6 @@ O2O_OS/exp
 exp/
 __pycache__/
 **/__pycache__/
+*.py[cod]
 **/swanlog/
 .vscode/

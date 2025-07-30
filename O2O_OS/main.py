@@ -13,6 +13,7 @@ from utils.datasets import Dataset, ReplayBuffer
 from evaluation import evaluate
 # from agents import agents
 from agents.agent import O2O_OS_Agent as agent_class
+from agents.wrappers.normalization import NormalizedAgent
 import numpy as np
 
 if 'CUDA_VISIBLE_DEVICES' in os.environ:
@@ -153,12 +154,22 @@ def main(_):
     train_dataset = process_train_dataset(train_dataset)
     example_batch = train_dataset.sample(())
     
-    agent = agent_class.create(
+    agent = agent_class.create(  # [NOTE] create the agent here.
         FLAGS.seed,
         example_batch['observations'],
         example_batch['actions'],
         config,
     )
+    
+    # print(f"---What!?---, config['RSNorm']={config['RSNorm']}")
+    if config['RSNorm']:
+        # print(f"---What!?---, config['RSNorm']={config['RSNorm']}")
+        obs_shape = example_batch['observations'].shape
+        agent = NormalizedAgent.create(
+            agent=agent,
+            obs_shape=obs_shape,
+            epsilon=1e-8
+        )
 
     # Setup logging.
     prefixes = ["eval", "env"]
@@ -318,7 +329,7 @@ def main(_):
 
     print("Starting online RL...", flush=True)
         
-    ob, _ = env.reset()
+    ob, _ = env.reset()  # [NOTE] in online stage, agent start to interact with environment
     
     action_queue = []
     action_dim = example_batch["actions"].shape[-1]
@@ -341,7 +352,7 @@ def main(_):
             if FLAGS.offline_steps == 0 and i <= FLAGS.start_training_steps:
                 action = jax.random.uniform(key, shape=(action_dim,), minval=-1, maxval=1)
             else:
-                action = agent.sample_actions(observations=ob, rng=key)
+                action = agent.sample_actions(observations=ob, rng=key, training=True)
 
             action_chunk = np.array(action).reshape(-1, action_dim)
             for action in action_chunk:
@@ -368,6 +379,7 @@ def main(_):
         # always log this at every step
         logger.log(env_info, "env", step=log_step)
 
+        # [NOTE] adjust reward based on environment type
         if 'antmaze' in FLAGS.env_name and (
             'diverse' in FLAGS.env_name or 'play' in FLAGS.env_name or 'umaze' in FLAGS.env_name
         ):
