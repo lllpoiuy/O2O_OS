@@ -3,3 +3,4 @@ exp/
 __pycache__/
 **/__pycache__/
 **/swanlog/
+.vscode/
