@@ -33,20 +33,21 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
 flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
-flags.DEFINE_integer('imitation_steps', 1000000, 'Number of imitation steps.')
-flags.DEFINE_integer('offline_steps', 1000000, 'Number of offline steps.')
-flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
+flags.DEFINE_integer('imitation_steps', 300000, 'Number of imitation steps.')
+flags.DEFINE_integer('offline_steps', 500000, 'Number of offline steps.')
+flags.DEFINE_integer('online_steps', 500000, 'Number of online steps.')
 flags.DEFINE_integer('start_training_steps', 20000, 'when does training start')
-flags.DEFINE_integer('warmup_steps', 20000, 'when does actor training start')
+flags.DEFINE_integer('offline_warmup_steps', 100000, 'when does actor training start')
+flags.DEFINE_integer('online_warmup_steps', 20000, 'when does actor training start')
 
 
 
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
-flags.DEFINE_integer('log_interval', 1500, 'Logging interval.')            # [*5000, 1500]
-flags.DEFINE_integer('eval_interval', 30000, 'Evaluation interval.')      # [*100000, 30000]
+flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
+flags.DEFINE_integer('eval_interval', 50000, 'Evaluation interval.')
 flags.DEFINE_integer('save_interval', -1, 'Save interval.')
 
-flags.DEFINE_integer('utd_ratio', 1, "update to data ratio")
+flags.DEFINE_integer('utd_ratio', 20, "update to data ratio")
 
 flags.DEFINE_float('discount', 0.99, 'discount factor')
 
@@ -275,7 +276,10 @@ def main(_):
 
         batch = train_dataset.sample_sequence(config['batch_size'], sequence_length=FLAGS.horizon_length, discount=discount)
 
-        agent, offline_info = agent.update(batch)  # [NOTE] agent offline update here!
+        if i <= FLAGS.offline_warmup_steps:
+            agent, offline_info = agent.warmup_update(batch)
+        else:
+            agent, offline_info = agent.update(batch)
 
         if i % FLAGS.log_interval == 0:
             logger.log(offline_info, "offline_agent", step=log_step)
@@ -419,13 +423,17 @@ def main(_):
                 batch = replay_buffer.sample_sequence(config['batch_size'] * FLAGS.utd_ratio, sequence_length=FLAGS.horizon_length, discount=discount)
                 batch = jax.tree.map(lambda x: x.reshape((FLAGS.utd_ratio, config["batch_size"]) + x.shape[1:]), batch)
 
-            agent, update_info["online_agent"] = agent.batch_update(batch, Is_warmup=(i - FLAGS.start_training_steps < FLAGS.warmup_steps))
+            if i - FLAGS.start_training_steps < FLAGS.online_warmup_steps:
+                agent, update_info["online_agent"] = agent.batch_warmup_update(batch)
+            else:
+                agent, update_info["online_agent"] = agent.batch_update(batch)
             
         if i % FLAGS.log_interval == 0:
             for key, info in update_info.items():
                 logger.log(info, key, step=log_step)
             update_info = {}
 
+        # eval
         if i == FLAGS.online_steps or \
             (FLAGS.eval_interval != 0 and i % FLAGS.eval_interval == 0):
             eval_info, _, _ = evaluate(

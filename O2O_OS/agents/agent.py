@@ -71,7 +71,7 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         )
         
     @jax.jit
-    def total_loss(self, batch, grad_params, rng=None, Is_warmup=False):
+    def total_loss(self, batch, grad_params, rng=None):
         """Compute the total loss."""
         info = {}
         rng = rng if rng is not None else self.rng
@@ -81,10 +81,6 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         critic_loss, critic_info = self.critic_loss(batch, grad_params, critic_rng)
         for k, v in critic_info.items():
             info[f'critic/{k}'] = v
-
-        if Is_warmup:
-            # If we are in warmup phase, we only compute the critic loss
-            return critic_loss, info
         
         actor_loss, actor_info = self.actor_loss(batch, grad_params, actor_rng)
         for k, v in actor_info.items():
@@ -103,28 +99,52 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         network.params[f'modules_target_{module_name}'] = new_target_params
     
     @staticmethod
-    def _update(self, batch, Is_warmup=False):
-
+    def _update(self, batch):
         """Update the agent and return a new agent with information dictionary."""
-        new_rng, rng = jax.random.split(agent.rng)
+        new_rng, rng = jax.random.split(self.rng)
 
         def loss_fn(grad_params):
-            return self.total_loss(batch, grad_params, rng=rng, Is_warmup=Is_warmup)
+            return self.total_loss(batch, grad_params, rng=rng)
 
-        new_network, info = agent.network.apply_loss_fn(loss_fn=loss_fn)
-        agent.target_update(new_network, 'critic')
+        new_network, info = self.network.apply_loss_fn(loss_fn=loss_fn)
+        self.target_update(new_network, 'critic')
 
-        return agent.replace(network=new_network, rng=new_rng), info
+        return self.replace(network=new_network, rng=new_rng), info
     
     @jax.jit
     def update(self, batch):
         return self._update(self, batch)
     
     @jax.jit
-    def batch_update(self, batch, Is_warmup=False):
+    def batch_update(self, batch):
         """Update the agent and return a new agent with information dictionary."""
         # update_size = batch["observations"].shape[0]
         agent, infos = jax.lax.scan(self._update, self, batch)
+        return agent, jax.tree_util.tree_map(lambda x: x.mean(), infos)
+    
+    @staticmethod
+    def _warmup_update(self, batch):
+        """Warmup update for the agent."""
+        new_rng, rng = jax.random.split(self.rng)
+
+        def loss_fn(grad_params):
+            critic_loss, critic_info = self.critic_loss(batch, grad_params, rng=rng)
+            info = {}
+            for k, v in critic_info.items():
+                info[f'critic/{k}'] = v
+            return critic_loss, info
+
+        new_network, info = self.network.apply_loss_fn(loss_fn=loss_fn)
+
+        return self.replace(network=new_network, rng=new_rng), info
+    
+    @jax.jit
+    def warmup_update(self, batch):
+        return self._warmup_update(self, batch)
+    
+    @jax.jit
+    def batch_warmup_update(self, batch):
+        agent, infos = jax.lax.scan(self._warmup_update, self, batch)
         return agent, jax.tree_util.tree_map(lambda x: x.mean(), infos)
     
     @jax.jit

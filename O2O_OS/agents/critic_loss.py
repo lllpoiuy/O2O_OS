@@ -152,7 +152,8 @@ def critic_loss(
             # 'cql_alpha_prime': cql_alpha_prime,
         })
         if critic_loss_config['cql'].get('cql_target_action_gap', None) is not None:
-            info['cql_alpha_prime'] = cql_alpha_prime
+            # info['cql_alpha_prime'] = cql_alpha_prime
+            raise NotImplementedError("CQL target action gap is not implemented yet.")
         info['critic_loss'] = critic_loss
                 
     info.update({
