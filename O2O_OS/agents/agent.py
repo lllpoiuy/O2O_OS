@@ -57,6 +57,18 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
             )
         else:
             raise ValueError(f"Unknown actor loss type: {self.config['actor_loss']['type']}")
+    
+    def imitation_loss(self, batch, grad_params, rng):
+        """Compute the imitation loss."""
+        batch_actions = jnp.reshape(batch["actions"], (batch["actions"].shape[0], -1))
+        
+        return agents.actor_loss.imitation_loss(
+            agent=self,
+            batch=batch,
+            grad_params=grad_params,
+            batch_actions=batch_actions,
+            rng=rng
+        )
         
     @jax.jit
     def total_loss(self, batch, grad_params, rng=None):
@@ -110,6 +122,17 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         agent, infos = jax.lax.scan(self._update, self, batch)
         return agent, jax.tree_util.tree_map(lambda x: x.mean(), infos)
     
+    @jax.jit
+    def imitation_update(self, batch):
+        """Update the agent using imitation learning."""
+        new_rng, rng = jax.random.split(self.rng)
+
+        def loss_fn(grad_params):
+            return self.imitation_loss(batch, grad_params, rng=rng)
+
+        new_network, info = self.network.apply_loss_fn(loss_fn=loss_fn)
+
+        return self.replace(network=new_network, rng=new_rng), info
     
     @jax.jit
     def sample_actions(

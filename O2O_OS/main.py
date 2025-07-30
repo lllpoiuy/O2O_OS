@@ -32,7 +32,8 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
 flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
-flags.DEFINE_integer('offline_steps', 1000000, 'Number of online steps.')
+flags.DEFINE_integer('imitation_steps', 1000000, 'Number of imitation steps.')
+flags.DEFINE_integer('offline_steps', 1000000, 'Number of offline steps.')
 flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
@@ -101,6 +102,8 @@ def main(_):
     else:
         env, eval_env, train_dataset, val_dataset = make_env_and_datasets(FLAGS.env_name)
 
+    print(f"Train dataset size: {len(train_dataset['masks'])}")
+
     # house keeping
     random.seed(FLAGS.seed)
     np.random.seed(FLAGS.seed)
@@ -165,6 +168,61 @@ def main(_):
         swanlab_logger=swanlab,
     )
 
+
+
+
+    print("Starting imitation learning...", flush=True)
+
+    imitation_init_time = time.time()
+    # Imitation Learning
+    for i in tqdm.tqdm(range(1, FLAGS.imitation_steps + 1)):
+        if i == 1:
+            print(f"Imitation learning with {len(train_dataset['masks'])} transitions", flush=True)
+
+        log_step += 1
+
+        if FLAGS.ogbench_dataset_dir is not None and FLAGS.dataset_replace_interval != 0 and i % FLAGS.dataset_replace_interval == 0:
+            dataset_idx = (dataset_idx + 1) % len(dataset_paths)
+            print(f"Using new dataset: {dataset_paths[dataset_idx]}", flush=True)
+            train_dataset, val_dataset = make_ogbench_env_and_datasets(
+                FLAGS.env_name,
+                dataset_path=dataset_paths[dataset_idx],
+                compact_dataset=False,
+                dataset_only=True,
+                cur_env=env,
+            )
+            train_dataset = process_train_dataset(train_dataset)
+
+        batch = train_dataset.sample_sequence(config['batch_size'], sequence_length=FLAGS.horizon_length, discount=discount)
+
+        agent, imitation_info = agent.imitation_update(batch)
+
+        if i % FLAGS.log_interval == 0:
+            logger.log(imitation_info, "offline_agent", step=log_step)
+        
+        # saving
+        if FLAGS.save_interval > 0 and i % FLAGS.save_interval == 0:
+            save_agent(agent, FLAGS.save_dir, log_step)
+
+        # eval
+        if i == FLAGS.imitation_steps - 1 or \
+            (FLAGS.eval_interval != 0 and i % FLAGS.eval_interval == 0):
+            eval_info, _, _ = evaluate(
+                agent=agent,
+                env=eval_env,
+                action_dim=example_batch["actions"].shape[-1],
+                num_eval_episodes=FLAGS.eval_episodes,
+                num_video_episodes=FLAGS.video_episodes,
+                video_frame_skip=FLAGS.video_frame_skip,
+            )
+            logger.log(eval_info, "eval", step=log_step)
+
+
+
+
+
+    print("Starting offline RL...", flush=True)
+
     offline_init_time = time.time()
     # Offline RL
     for i in tqdm.tqdm(range(1, FLAGS.offline_steps + 1)):
@@ -217,6 +275,9 @@ def main(_):
     elif FLAGS.replay_type == "online_only":
         replay_buffer = ReplayBuffer.create(example_batch, size=FLAGS.buffer_size)
 
+
+
+    print("Starting online RL...", flush=True)
         
     ob, _ = env.reset()
     
@@ -357,6 +418,7 @@ def main(_):
                  "qpos": np.stack(data["qpos"], axis=0), 
                  "qvel": np.stack(data["qvel"], axis=0), 
                  "obs": np.stack(data["obs"], axis=0), 
+                 "imitation_time": offline_init_time - imitation_init_time,
                  "offline_time": online_init_time - offline_init_time,
                  "online_time": end_time - online_init_time,
         }
