@@ -9,7 +9,7 @@
     "discount": 0.99,
     "tau": 0.005,
     "target_update_interval": 1,
-    "num_qs": 10,
+    "num_qs": 2,
     "horizon_length": null,
     "RSNorm": false,
 
@@ -22,14 +22,20 @@
     "critic_loss": {
         "type": "sac",
         "q_agg": "mean",
-        "cql": null
+        "cql": {
+            "cql_n_actions": 10,
+            "cql_temperature": 1,
+            "cql_min_q_weight": 0.005,
+            "cql_min_q_weight_online": 0.0,
+            "cql_target_action_gap": null
+        }
     },
 
     "sample_actions":{
         "type": "distill_ddpg",
-        "actor_num_samples": 32,
-        "soft_max": true,
-        "imitation_boostrapped": true
+        "actor_num_samples": 1,
+        "soft_max": false,
+        "imitation_boostrapped": false
     },
     
     "create_network": {

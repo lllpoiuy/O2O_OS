@@ -57,9 +57,21 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
             )
         else:
             raise ValueError(f"Unknown actor loss type: {self.config['actor_loss']['type']}")
+    
+    def imitation_loss(self, batch, grad_params, rng):
+        """Compute the imitation loss."""
+        batch_actions = jnp.reshape(batch["actions"], (batch["actions"].shape[0], -1))
+        
+        return agents.actor_loss.imitation_loss(
+            agent=self,
+            batch=batch,
+            grad_params=grad_params,
+            batch_actions=batch_actions,
+            rng=rng
+        )
         
     @jax.jit
-    def total_loss(self, batch, grad_params, rng=None):
+    def total_loss(self, batch, grad_params, rng=None, Is_warmup=False):
         """Compute the total loss."""
         info = {}
         rng = rng if rng is not None else self.rng
@@ -70,6 +82,10 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         for k, v in critic_info.items():
             info[f'critic/{k}'] = v
 
+        if Is_warmup:
+            # If we are in warmup phase, we only compute the critic loss
+            return critic_loss, info
+        
         actor_loss, actor_info = self.actor_loss(batch, grad_params, actor_rng)
         for k, v in actor_info.items():
             info[f'actor/{k}'] = v
@@ -87,12 +103,13 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         network.params[f'modules_target_{module_name}'] = new_target_params
     
     @staticmethod
-    def _update(agent, batch):  # [NOTE] self -> agent. static method!
+    def _update(self, batch, Is_warmup=False):
+
         """Update the agent and return a new agent with information dictionary."""
         new_rng, rng = jax.random.split(agent.rng)
 
         def loss_fn(grad_params):
-            return agent.total_loss(batch, grad_params, rng=rng)
+            return self.total_loss(batch, grad_params, rng=rng, Is_warmup=Is_warmup)
 
         new_network, info = agent.network.apply_loss_fn(loss_fn=loss_fn)
         agent.target_update(new_network, 'critic')
@@ -104,12 +121,23 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         return self._update(self, batch)
     
     @jax.jit
-    def batch_update(self, batch):
+    def batch_update(self, batch, Is_warmup=False):
         """Update the agent and return a new agent with information dictionary."""
         # update_size = batch["observations"].shape[0]
         agent, infos = jax.lax.scan(self._update, self, batch)
         return agent, jax.tree_util.tree_map(lambda x: x.mean(), infos)
     
+    @jax.jit
+    def imitation_update(self, batch):
+        """Update the agent using imitation learning."""
+        new_rng, rng = jax.random.split(self.rng)
+
+        def loss_fn(grad_params):
+            return self.imitation_loss(batch, grad_params, rng=rng)
+
+        new_network, info = self.network.apply_loss_fn(loss_fn=loss_fn)
+
+        return self.replace(network=new_network, rng=new_rng), info
     
     @jax.jit
     def sample_actions(

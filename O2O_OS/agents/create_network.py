@@ -148,6 +148,15 @@ def create_flow_network(
         encoder=encoders.get('actor_onestep_flow'),
     )
 
+    # Define the dual alpha variable.
+    if config["critic_loss"].get("cql", None) is not None:
+        if config["critic_loss"]["cql"].get("cql_target_action_gap", None) is not None:
+            cql_alpha_def = Temperature(1.0)
+        else:
+            cql_alpha_def = None
+    else:
+        cql_alpha_def = None
+
     
     network_info = dict(
         actor_bc_flow=(actor_bc_flow_def, (ex_observations, full_actions, ex_times)),
@@ -158,6 +167,8 @@ def create_flow_network(
     if encoders.get('actor_bc_flow') is not None:
         # Add actor_bc_flow_encoder to ModuleDict to make it separately callable.
         network_info['actor_bc_flow_encoder'] = (encoders.get('actor_bc_flow'), (ex_observations,))
+    if cql_alpha_def is not None:
+        network_info['cql_log_alpha_prime'] = (cql_alpha_def, ())
     networks = {k: v[0] for k, v in network_info.items()}
     network_args = {k: v[1] for k, v in network_info.items()}
 

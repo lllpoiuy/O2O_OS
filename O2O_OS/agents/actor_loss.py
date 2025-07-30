@@ -110,12 +110,6 @@ def bc_flow(
 
         print("OBAC enabled, computing OBAC loss.")
 
-        # now_noise = jax.random.normal(n_rng, (batch_size, action_dim))
-        # now_action = agents.sample_actions.compute_flow_actions(
-        #     agent,
-        #     batch['observations'],
-        #     noises=now_noise,
-        # )
         now_action = agent.sample_actions(
             batch['observations'],
             rng=n_rng,
@@ -142,7 +136,6 @@ def bc_flow(
 
         rng, noise_rng = jax.random.split(rng)
         noises = jax.random.normal(noise_rng, (batch_size, action_dim))
-        # target_flow_actions = agent.compute_flow_actions(batch['observations'], noises=noises)
         target_flow_actions = agents.sample_actions.compute_flow_actions(
             agent,
             batch['observations'],
@@ -170,3 +163,64 @@ def bc_flow(
 
 
     return actor_loss, metrics
+
+def imitation_loss(
+        agent : flax.struct.PyTreeNode,
+        batch : dict,
+        grad_params : dict,
+        batch_actions : jnp.ndarray,
+        rng : jax.random.PRNGKey,
+    ) -> tuple:
+
+    metrics = {}
+    total_loss = 0.0
+    
+    if agent.config["sample_actions"]["type"] == "gaussian":
+
+        dist = agent.network.select('actor')(batch['observations'], params=grad_params)
+        bc_loss = -dist.log_prob(jnp.clip(batch_actions, -1 + 1e-5, 1 - 1e-5)).mean()
+        total_loss += bc_loss
+        metrics['bc_loss'] = bc_loss
+
+    elif agent.config["sample_actions"]["type"] == "best_of_n" or agent.config["sample_actions"]["type"] == "distill_ddpg":
+
+        batch_size, action_dim = batch_actions.shape
+        rng, x_rng, t_rng = jax.random.split(rng, 3)
+        x_0 = jax.random.normal(x_rng, (batch_size, action_dim))
+        x_1 = batch_actions
+        t = jax.random.uniform(t_rng, (batch_size, 1))
+        x_t = (1 - t) * x_0 + t * x_1
+        vel = x_1 - x_0
+
+        pred = agent.network.select('actor_bc_flow')(batch['observations'], x_t, t, params=grad_params)
+
+        bc_flow_loss = jnp.reshape(
+                (pred - vel) ** 2, 
+                (batch_size, agent.config["horizon_length"], agent.config["action_dim"]) 
+            ) * batch["valid"][..., None]
+        
+        bc_flow_loss = jnp.mean(bc_flow_loss)
+        total_loss += bc_flow_loss
+        metrics['bc_flow_loss'] = bc_flow_loss
+
+        if agent.config["sample_actions"]["type"] == "distill_ddpg":
+            assert agent.network.select('actor_onestep_flow') is not None
+            assert agent.config["actor_loss"].get("alpha", None) is not None
+
+            rng, noise_rng = jax.random.split(rng)
+            noises = jax.random.normal(noise_rng, (batch_size, action_dim))
+            target_flow_actions = agents.sample_actions.compute_flow_actions(
+                agent,
+                batch['observations'],
+                noises=noises,
+            )
+            actor_actions = agent.network.select('actor_onestep_flow')(batch['observations'], noises, params=grad_params)
+            distill_loss = jnp.mean((actor_actions - target_flow_actions) ** 2)
+
+            total_loss += distill_loss * agent.config["actor_loss"]["alpha"]
+            metrics['distill_loss'] = distill_loss
+    
+    else:
+        raise ValueError(f"Unknown sample actions type: {agent.config['sample_actions']['type']}")
+    
+    return total_loss, metrics

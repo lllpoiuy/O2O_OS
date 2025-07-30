@@ -21,7 +21,7 @@ def is_robomimic_env(env_name):
     if "low_dim" not in env_name:
         return False
     task, dataset_type, hdf5_type = env_name.split("-")
-    return task in ("lift", "can", "square", "transport", "tool_hang") and dataset_type in ("mh", "ph")
+    return task in ("lift", "can", "square", "transport", "tool_hang") and dataset_type in ("mh", "ph", "mg")
 
 
 low_dim_keys = {"low_dim": ('robot0_eef_pos',

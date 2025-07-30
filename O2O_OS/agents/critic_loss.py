@@ -16,7 +16,15 @@ def critic_loss(
     Example config:
     "critic_loss": {
         "type": "sac",
-        "q_agg": "mean"
+        "q_agg": "mean",
+        "cql": {
+            "cql_n_actions": 10,
+            "cql_temperature": 1,
+            "cql_min_q_weight": 0.005,
+            "cql_min_q_weight_online": 0.0,
+            "cql_target_action_gap": 1.0,
+            "cql_log_alpha_prime": 1.0
+        }
     }
     """
 
@@ -65,7 +73,7 @@ def critic_loss(
             agent.network.select('critic')(batch['observations'], random_action, params=grad_params) for random_action in cql_random_actions
         ])
         
-        # Sample actions for CQL, 2: policy actions
+        # # Sample actions for CQL, 2: policy actions
         rng, policy_action_rng = jax.random.split(rng)
         policy_action_keys = jax.random.split(policy_action_rng, cql_n_actions)
         cql_actions = jnp.stack([
@@ -76,7 +84,7 @@ def critic_loss(
             agent.network.select('critic')(batch['observations'], policy_action, params=grad_params) for policy_action in cql_actions
         ])
 
-        # Sample actions for CQL, 3: next obs actions
+        # # Sample actions for CQL, 3: next obs actions
         rng, next_policy_action_rng = jax.random.split(rng)
         next_policy_action_keys = jax.random.split(next_policy_action_rng, cql_n_actions)
         cql_next_actions = jnp.stack([
@@ -87,6 +95,8 @@ def critic_loss(
             agent.network.select('critic')(batch['observations'], next_action, params=grad_params) for next_action in cql_next_actions
         ])
 
+        print("cql_random_actions_qs.shape:", cql_random_actions_qs.shape)
+
 
         cql_cat_q = jnp.concatenate([
             cql_random_actions_qs,
@@ -94,40 +104,42 @@ def critic_loss(
             cql_next_actions_qs,
         ], axis=0)
 
+        print("cql_cat_q.shape:", cql_cat_q.shape)
+
         cql_temperature = critic_loss_config['cql']['cql_temperature']
         cql_min_q_weight = critic_loss_config['cql']['cql_min_q_weight']
 
-        cql_loss_total = 0
 
-        for i in range(agent.config["num_qs"]):
-            cql_i = cql_cat_q[:, i, :]
-            cql_logsumexp = jax.scipy.special.logsumexp(cql_i / cql_temperature, axis=0) * cql_temperature
-            assert cql_logsumexp.shape == q[i].shape
-            cql_q_diff = cql_logsumexp - q[i]
+        cql_logsumexp = jax.scipy.special.logsumexp(cql_cat_q / cql_temperature, axis=0) * cql_temperature
 
+        cql_q_diff = cql_logsumexp - q
+
+        cql_loss_total = 0.0
+
+        if critic_loss_config['cql'].get('cql_target_action_gap', None) is not None:
+            # lagrange def
+            # cql_target_action_gap = critic_loss_config['cql']['cql_target_action_gap']
+            # cql_alpha_prime = agent.network.select('cql_log_alpha_prime')(params = grad_params)
+            # cql_alpha_prime = jnp.clip(jnp.exp(cql_alpha_prime), a_min=0.0, a_max=10.0)
+
+            # print("shape of cql_q_diff:", cql_q_diff.shape)
+            # print("shape of cql_alpha_prime:", cql_alpha_prime.shape)
+            # print("shape of batch['valid']:", batch['valid'].shape)
+            # print("shape of batch_valid:", batch_valid.shape)
+
+            # # alpha loss
+            # alpha_loss = -(jax.lax.stop_gradient(cql_q_diff - cql_target_action_gap) * cql_alpha_prime * batch_valid).mean() * cql_min_q_weight
+            # cql_loss_total += alpha_loss
+
+            # # cql loss
+            # cql_loss = (cql_q_diff * batch_valid).mean() * cql_min_q_weight * jax.lax.stop_gradient(cql_alpha_prime)
+            # cql_loss_total += cql_loss
+            raise NotImplementedError("CQL target action gap is not implemented yet.")
+        else:
+            # cql loss
+            cql_loss = (cql_q_diff * batch_valid).mean()
+            cql_loss_total += cql_loss * cql_min_q_weight
             
-            if critic_loss_config['cql'].get('cql_target_action_gap', None) is not None:
-                # lagrange def
-                cql_target_action_gap = critic_loss_config['cql']['cql_target_action_gap']
-                cql_alpha_prime = agent.network.select('cql_log_alpha_prime')(params = grad_params)
-                cql_alpha_prime = jnp.clip(jnp.exp(cql_alpha_prime), a_min=0.0, a_max=10.0)
-
-                print("shape of cql_q_diff:", cql_q_diff.shape)
-                print("shape of cql_alpha_prime:", cql_alpha_prime.shape)
-                print("shape of batch['valid']:", batch['valid'].shape)
-                print("shape of batch_valid:", batch_valid.shape)
-
-                # alpha loss
-                alpha_loss = -(jax.lax.stop_gradient(cql_q_diff - cql_target_action_gap) * cql_alpha_prime * batch_valid).mean() * cql_min_q_weight
-                cql_loss_total += alpha_loss / cql_n_actions
-
-                # cql loss
-                cql_loss = (cql_q_diff * batch_valid).mean() * cql_min_q_weight * jax.lax.stop_gradient(cql_alpha_prime)
-                cql_loss_total += cql_loss / cql_n_actions
-            else:
-                # cql loss
-                cql_loss = (cql_q_diff * batch_valid).mean()
-                cql_loss_total += cql_loss * cql_min_q_weight
                 
     info = {}
 
