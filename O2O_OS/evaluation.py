@@ -4,7 +4,8 @@ import jax
 import numpy as np
 from tqdm import trange
 from functools import partial
-
+import agents
+import jax.numpy as jnp
 
 def supply_rng(f, rng=jax.random.PRNGKey(0)):
     """Helper function to split the random number generator key before each call to the function."""
@@ -16,6 +17,19 @@ def supply_rng(f, rng=jax.random.PRNGKey(0)):
 
     return wrapped
 
+def sample_base_policy(rng, agent, observations):
+    action_dim = agent.config['action_dim'] * agent.config['horizon_length']
+    imitation_noise = jax.random.normal(
+        rng,
+        (
+            *observations.shape[: -len(agent.config['ob_dims'])],
+            1, action_dim
+        ),
+    )
+    imitation_observations = jnp.repeat(observations[..., None, :], 1, axis=-2)
+    imitation_actions = agents.sample_actions.compute_flow_actions(agent, imitation_observations, imitation_noise)
+    imitation_actions = jnp.clip(imitation_actions, -1, 1)
+    return imitation_actions
 
 def flatten(d, parent_key='', sep='.'):
     """Flatten a dictionary."""
@@ -45,6 +59,7 @@ def evaluate(
     action_shape=None,
     observation_shape=None,
     action_dim=None,
+    evaluate_type="optimal" # or base
 ):
     """Evaluate the agent in the environment.
 
@@ -60,7 +75,10 @@ def evaluate(
     Returns:
         A tuple containing the statistics, trajectories, and rendered videos.
     """
-    actor_fn = supply_rng(agent.sample_actions, rng=jax.random.PRNGKey(np.random.randint(0, 2**32)))
+    if evaluate_type == "optimal":
+        actor_fn = supply_rng(agent.sample_actions, rng=jax.random.PRNGKey(np.random.randint(0, 2**32)))
+    else:
+        actor_fn = supply_rng(partial(sample_base_policy, agent=agent), rng=jax.random.PRNGKey(np.random.randint(0, 2**32)))
     trajs = []
     stats = defaultdict(list)
 

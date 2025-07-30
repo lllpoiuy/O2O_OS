@@ -35,11 +35,15 @@ flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "m
 flags.DEFINE_integer('imitation_steps', 1000000, 'Number of imitation steps.')
 flags.DEFINE_integer('offline_steps', 1000000, 'Number of offline steps.')
 flags.DEFINE_integer('online_steps', 1000000, 'Number of online steps.')
+flags.DEFINE_integer('start_training_steps', 20000, 'when does training start')
+flags.DEFINE_integer('warmup_steps', 20000, 'when does actor training start')
+
+
+
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 100000, 'Evaluation interval.')
 flags.DEFINE_integer('save_interval', -1, 'Save interval.')
-flags.DEFINE_integer('start_training', 20000, 'when does training start')
 
 flags.DEFINE_integer('utd_ratio', 1, "update to data ratio")
 
@@ -157,10 +161,14 @@ def main(_):
 
     # Setup logging.
     prefixes = ["eval", "env"]
+    if FLAGS.imitation_steps > 0:
+        prefixes.append("il_agent")
     if FLAGS.offline_steps > 0:
         prefixes.append("offline_agent")
     if FLAGS.online_steps > 0:
         prefixes.append("online_agent")
+    if config["create_network"]["type"] != "normal":
+        prefixes.append("eval_basePolicy")
 
     logger = LoggingHelper(
         csv_loggers={prefix: CsvLogger(os.path.join(FLAGS.save_dir, f"{prefix}.csv")) 
@@ -205,17 +213,31 @@ def main(_):
             save_agent(agent, FLAGS.save_dir, log_step)
 
         # eval
-        if i == FLAGS.imitation_steps - 1 or \
+        if i == FLAGS.imitation_steps or \
             (FLAGS.eval_interval != 0 and i % FLAGS.eval_interval == 0):
+
             eval_info, _, _ = evaluate(
                 agent=agent,
                 env=eval_env,
                 action_dim=example_batch["actions"].shape[-1],
                 num_eval_episodes=FLAGS.eval_episodes,
                 num_video_episodes=FLAGS.video_episodes,
-                video_frame_skip=FLAGS.video_frame_skip,
+                video_frame_skip=FLAGS.video_frame_skip
             )
             logger.log(eval_info, "eval", step=log_step)
+
+            if config["create_network"]["type"] != "normal":
+                eval_info, _, _ = evaluate(
+                    agent=agent,
+                    env=eval_env,
+                    action_dim=example_batch["actions"].shape[-1],
+                    num_eval_episodes=FLAGS.eval_episodes,
+                    num_video_episodes=FLAGS.video_episodes,
+                    video_frame_skip=FLAGS.video_frame_skip,
+                    evaluate_type="base"
+                )
+                logger.log(eval_info, "eval_basePolicy", step=log_step)
+
 
 
 
@@ -252,7 +274,7 @@ def main(_):
             save_agent(agent, FLAGS.save_dir, log_step)
 
         # eval
-        if i == FLAGS.offline_steps - 1 or \
+        if i == FLAGS.offline_steps or \
             (FLAGS.eval_interval != 0 and i % FLAGS.eval_interval == 0):
             # during eval, the action chunk is executed fully
             eval_info, _, _ = evaluate(
@@ -265,6 +287,18 @@ def main(_):
             )
             logger.log(eval_info, "eval", step=log_step)
 
+            if config["create_network"]["type"] != "normal":
+                eval_info, _, _ = evaluate(
+                    agent=agent,
+                    env=eval_env,
+                    action_dim=example_batch["actions"].shape[-1],
+                    num_eval_episodes=FLAGS.eval_episodes,
+                    num_video_episodes=FLAGS.video_episodes,
+                    video_frame_skip=FLAGS.video_frame_skip,
+                    evaluate_type="base"
+                )
+                logger.log(eval_info, "eval_basePolicy", step=log_step)
+
     # transition from offline to online
     if FLAGS.replay_type == "portional":
         replay_buffer = ReplayBuffer.create(example_batch, size=FLAGS.buffer_size)
@@ -274,6 +308,7 @@ def main(_):
         )
     elif FLAGS.replay_type == "online_only":
         replay_buffer = ReplayBuffer.create(example_batch, size=FLAGS.buffer_size)
+
 
 
 
@@ -299,7 +334,7 @@ def main(_):
         
         # during online rl, the action chunk is executed fully
         if len(action_queue) == 0:
-            if FLAGS.offline_steps == 0 and i <= FLAGS.start_training:
+            if FLAGS.offline_steps == 0 and i <= FLAGS.start_training_steps:
                 action = jax.random.uniform(key, shape=(action_dim,), minval=-1, maxval=1)
             else:
                 action = agent.sample_actions(observations=ob, rng=key)
@@ -359,7 +394,7 @@ def main(_):
         else:
             ob = next_ob
 
-        if i >= FLAGS.start_training:
+        if i >= FLAGS.start_training_steps:
             if FLAGS.replay_type == "portional":
                 
                 dataset_batch = train_dataset.sample_sequence(config['batch_size'] // 2 * FLAGS.utd_ratio, sequence_length=FLAGS.horizon_length, discount=discount)
@@ -372,14 +407,14 @@ def main(_):
                 batch = replay_buffer.sample_sequence(config['batch_size'] * FLAGS.utd_ratio, sequence_length=FLAGS.horizon_length, discount=discount)
                 batch = jax.tree.map(lambda x: x.reshape((FLAGS.utd_ratio, config["batch_size"]) + x.shape[1:]), batch)
 
-            agent, update_info["online_agent"] = agent.batch_update(batch)
+            agent, update_info["online_agent"] = agent.batch_update(batch, Is_warmup=(i - FLAGS.start_training_steps < FLAGS.warmup_steps))
             
         if i % FLAGS.log_interval == 0:
             for key, info in update_info.items():
                 logger.log(info, key, step=log_step)
             update_info = {}
 
-        if i == FLAGS.online_steps - 1 or \
+        if i == FLAGS.online_steps or \
             (FLAGS.eval_interval != 0 and i % FLAGS.eval_interval == 0):
             eval_info, _, _ = evaluate(
                 agent=agent,
@@ -390,6 +425,18 @@ def main(_):
                 video_frame_skip=FLAGS.video_frame_skip,
             )
             logger.log(eval_info, "eval", step=log_step)
+
+            if config["create_network"]["type"] != "normal":
+                eval_info, _, _ = evaluate(
+                    agent=agent,
+                    env=eval_env,
+                    action_dim=example_batch["actions"].shape[-1],
+                    num_eval_episodes=FLAGS.eval_episodes,
+                    num_video_episodes=FLAGS.video_episodes,
+                    video_frame_skip=FLAGS.video_frame_skip,
+                    evaluate_type="base"
+                )
+                logger.log(eval_info, "eval_basePolicy", step=log_step)
 
         # saving
         if FLAGS.save_interval > 0 and i % FLAGS.save_interval == 0:

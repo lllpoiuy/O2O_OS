@@ -34,7 +34,7 @@
         "type": "distill_ddpg",
         "actor_num_samples": 1,
         "soft_max": false,
-        "imitation_boostrapped": true
+        "imitation_boostrapped": false
     },
 
     
