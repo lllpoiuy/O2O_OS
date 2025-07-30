@@ -88,7 +88,8 @@ class NormalizedAgent(flax.struct.PyTreeNode):
         return wrapper, mean_info
 
     # @partial(jax.jit, static_argnums=0)
-    @jax.jit
+    # @jax.jit
+    @partial(jax.jit, static_argnames=['training'])
     def sample_actions(
         self,
         observations: jnp.ndarray,
