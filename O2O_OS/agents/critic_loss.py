@@ -99,7 +99,7 @@ def critic_loss(
 
         cql_loss_total = 0
 
-        for i in range(agent.config["num_qs"]):
+        for i in range(agent.config["critic_network"]["num_qs"]):
             cql_i = cql_cat_q[:, i, :]
             cql_logsumexp = jax.scipy.special.logsumexp(cql_i / cql_temperature, axis=0) * cql_temperature
             assert cql_logsumexp.shape == q[i].shape

@@ -1,6 +1,7 @@
 
 from utils.flax_utils import ModuleDict, TrainState, nonpytree_field
 from networks.rlpd_networks import Ensemble, StateActionValue, MLP
+from networks.simbaV2_networks import SimbaV2Critic, SimbaV2DoubleCritic, SimbaV2Actor
 from networks.rlpd_distributions import TanhNormal
 from functools import partial
 from networks.flow_networks import ActorVectorField, Value
@@ -49,18 +50,34 @@ def create_normal_network(
         config["actor_loss"]['target_entropy'] = -config["actor_loss"]['target_entropy_multiplier'] * full_action_dim
 
     # Define networks
-    critic_base_cls = partial(
-        MLP,
-        hidden_dims=config['value_hidden_dims'],
-        activate_final=True,
-        use_layer_norm=config["critic_layer_norm"],
-    )
-    critic_cls = partial(StateActionValue, base_cls=critic_base_cls)
-    critic_def = Ensemble(critic_cls, num=config["num_qs"])
+    # critic network
+    if config["critic_network"]["critic_type"] == "MLP":
+        critic_base_cls = partial(
+            MLP,
+            hidden_dims=config["critic_network"]['value_hidden_dims'],
+            activate_final=True,
+            use_layer_norm=config["critic_network"]["critic_layer_norm"],
+        )
+        critic_cls = partial(StateActionValue, base_cls=critic_base_cls)
+        critic_def = Ensemble(critic_cls, num=config["critic_network"]["num_qs"])
+    elif config["critic_network"]["critic_type"] == "simbaV2":
+        critic_base_cls = partial(
+            SimbaV2Critic, 
+            hidden_dim=config['value_hidden_dim'],
+            
+        )
+        critic_cls = None
+        critic_def = None
+        
 
-
-    actor_base_cls = partial(MLP, hidden_dims=config["actor_hidden_dims"], activate_final=True)
-    actor_def = TanhNormal(actor_base_cls, full_action_dim)
+    # actor network
+    if config["actor_network"]["actor_type"] == "MLP":
+        actor_base_cls = partial(MLP, hidden_dims=config["actor_network"]["actor_hidden_dims"], activate_final=True)
+        actor_def = TanhNormal(actor_base_cls, full_action_dim)
+    elif config["actor_network"]['actor_type'] == "simbaV2":
+        actor_base_cls = None
+        actor_def = None
+        
 
     # Define the dual alpha variable.
     alpha_def = Temperature(config["actor_loss"]["init_temp"])
@@ -127,24 +144,24 @@ def create_flow_network(
 
     # Define networks.
     critic_def = Value(
-        hidden_dims=config['value_hidden_dims'],
-        layer_norm=config['critic_layer_norm'],
-        num_ensembles=config['num_qs'],
+        hidden_dims=config["critic_network"]['value_hidden_dims'],
+        layer_norm=config["critic_network"]['critic_layer_norm'],
+        num_ensembles=config["critic_network"]['num_qs'],
         encoder=encoders.get('critic'),
     )
 
     actor_bc_flow_def = ActorVectorField(
-        hidden_dims=config['actor_hidden_dims'],
+        hidden_dims=config['actor_network']['actor_hidden_dims'],
         action_dim=full_action_dim,
-        layer_norm=config['actor_layer_norm'],
+        layer_norm=config['actor_network']['actor_layer_norm'],
         encoder=encoders.get('actor_bc_flow'),
         use_fourier_features=config["create_network"]["use_fourier_features"],
         fourier_feature_dim=config["create_network"]["fourier_feature_dim"],
     )
     actor_onestep_flow_def = ActorVectorField(
-        hidden_dims=config['actor_hidden_dims'],
+        hidden_dims=config['actor_network']['actor_hidden_dims'],
         action_dim=full_action_dim,
-        layer_norm=config['actor_layer_norm'],
+        layer_norm=config['actor_network']['actor_layer_norm'],
         encoder=encoders.get('actor_onestep_flow'),
     )
 
