@@ -14,6 +14,7 @@ class MLP(nn.Module):
     scale_final: Optional[float] = None
     dropout_rate: Optional[float] = None
     use_pnorm: bool = False
+    # preLNRes: bool = False
 
     @nn.compact
     def __call__(self, x: jnp.ndarray, training: bool = False) -> jnp.ndarray:

@@ -87,17 +87,17 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         network.params[f'modules_target_{module_name}'] = new_target_params
     
     @staticmethod
-    def _update(self, batch):
+    def _update(agent, batch):  # [NOTE] self -> agent. static method!
         """Update the agent and return a new agent with information dictionary."""
-        new_rng, rng = jax.random.split(self.rng)
+        new_rng, rng = jax.random.split(agent.rng)
 
         def loss_fn(grad_params):
-            return self.total_loss(batch, grad_params, rng=rng)
+            return agent.total_loss(batch, grad_params, rng=rng)
 
-        new_network, info = self.network.apply_loss_fn(loss_fn=loss_fn)
-        self.target_update(new_network, 'critic')
+        new_network, info = agent.network.apply_loss_fn(loss_fn=loss_fn)
+        agent.target_update(new_network, 'critic')
 
-        return self.replace(network=new_network, rng=new_rng), info
+        return agent.replace(network=new_network, rng=new_rng), info
     
     @jax.jit
     def update(self, batch):
@@ -116,6 +116,7 @@ class O2O_OS_Agent(flax.struct.PyTreeNode):
         self,
         observations,
         rng=None,
+        training: bool = False,
     ):
         """Sample actions from the actor."""
         if self.config["sample_actions"]["type"] == "gaussian":
