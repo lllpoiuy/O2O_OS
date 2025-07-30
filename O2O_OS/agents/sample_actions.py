@@ -168,6 +168,9 @@ def sample_distill_ddpg(
         else:
             q_imitation = q_imitation.min(axis=0)
 
+        q_imitation = jnp.squeeze(q_imitation, axis=-1)
+        imitation_actions = jnp.squeeze(imitation_actions, axis=-2)
+
         # print("q_imitation.shape:", q_imitation.shape)
         # print("q_actions.shape:", q_actions.shape)
         # print("imitation_actions.shape:", imitation_actions.shape)

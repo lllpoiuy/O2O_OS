@@ -11,6 +11,7 @@
     "target_update_interval": 1,
     "num_qs": 2,
     "horizon_length": null,
+    "RSNorm": false,
 
     "actor_loss": {
         "type": "flow_bc",
@@ -36,7 +37,6 @@
         "soft_max": false,
         "imitation_boostrapped": false
     },
-
     
     "create_network": {
         "type": "flow",

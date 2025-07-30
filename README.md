@@ -12,6 +12,7 @@ Algorithms
   + cal-ql
   + rlpd
   + wsrl
+  + samg
 + diffusion-based methods
   + dppo
   + dsrl
@@ -34,19 +35,26 @@ Main components:
 + offline controller
 + warm-up controller
 + online controller
++ concepts (dormant ratio, simplicity bias)
 + dataset & env
+
 
 Plugin-compenents:
 + expectile regression (critic_loss)
 + conservatism term (critic_loss)
 + calibrated term (critic_loss)
 + auxiliary one-step denoiser (sample_action, actor_loss, create_networks)
-+ action chunking (critic_loss, actor_loss, create_networks)
++ action chunking
 + best-of-n sampling (sample_action)
 + action gradient (sample_action)
 + base policy bootstraped exploration (sample_action)
-+ noise guided exploration (sample_action)
-+ auxiliary normal learner (actor_loss, sample_action)
++ noise guided exploration (sample_action, create_networks)
++ auxiliary normal learner (actor_loss, sample_action, create_networks)
++ state-action value offset function (create_networks) (see Fisher-BRC)
++ dual policy optimistic exploration (create_networks) (see BRO)
++ pessimistic/non-pessimistic quantile Q-value (create_networks) (see BRO)
+
+
 
 Networks:
 + Q-ensemble
@@ -55,6 +63,8 @@ Networks:
 + flow matching actor
 + diffusion actor
 + vla actor
++ MoE
++ LERP/Residual Feedforward Block/linear+scalar(see SimBa2)
 
 
 ## Acknowledgement
@@ -129,6 +139,27 @@ $\star$**RLPD** (Sergey, 2023): Efficient Online Reinforcement Learning with Off
 **WSRL** (Sergey, 2024); Efficient Online Reinforcement Learning Fine-Tuning Need Not Retain Offline Data, https://arxiv.org/pdf/2412.07762
 
 **DGN** (Finn, 2025); Reinforcement Learning via Implicit Imitation Guidance, https://arxiv.org/pdf/2506.07505v1
+
+
+
+**Fisher-BRC** (Kostrikov, 2021); Offline Reinforcement Learning with Fisher Divergence Critic Regularization, https://arxiv.org/pdf/2103.08050v1
+
+**EDIS** (Liu, 2024); Energy-Guided Diffusion Sampling for Offline-to-Online Reinforcement Learning, https://arxiv.org/pdf/2407.12448v2
+
+**BPPO** (Zhuang, 2023); Behavior Proximal Policy Optimization, https://arxiv.org/pdf/2302.11312v1
+
+**SimBa** (Lee, 2024); Simplicity Bias for Scaling Up Parameters in Deep Reinforcement Learning, https://arxiv.org/pdf/2410.09754
+
+**SimBa2** (Lee, 2025); Hyperspherical Normalization for Scalable Deep Reinforcement Learning, https://arxiv.org/pdf/2502.15280v2
+
+**BRO** (Nauman, 2024); Bigger, Regularized, Optimistic: scaling for compute and sample-efficient continuous control, https://arxiv.org/pdf/2405.16158v3
+
+**A-LIX** (Cetin, 2022); Stabilizing Off-Policy Deep Reinforcement Learning from Pixels, https://arxiv.org/pdf/2207.00986v1
+
+**Norm-generalization-vrl** (Li, 2023); Normalization Enhances Generalization in Visual Reinforcement Learning, https://arxiv.org/pdf/2306.00656v1
+
+**SAMG** (Zhang, 2024); Offline-to-Online Reinforcement Learning via State-Action-Conditional Offline Model Guidance, https://arxiv.org/pdf/2410.18626v2
+
 
 
 ## Environment Setup
