@@ -34,8 +34,8 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
 flags.DEFINE_integer('imitation_steps', 300000, 'Number of imitation steps.')
-flags.DEFINE_integer('offline_steps', 500000, 'Number of offline steps.')
-flags.DEFINE_integer('online_steps', 500000, 'Number of online steps.')
+flags.DEFINE_integer('offline_steps', 0, 'Number of offline steps.')
+flags.DEFINE_integer('online_steps', 250000, 'Number of online steps.')
 flags.DEFINE_integer('start_training_steps', 20000, 'when does training start')
 flags.DEFINE_integer('offline_warmup_steps', 100000, 'when does actor training start')
 flags.DEFINE_integer('online_warmup_steps', 20000, 'when does actor training start')
@@ -218,7 +218,7 @@ def main(_):
         agent, imitation_info = agent.imitation_update(batch)
 
         if i % FLAGS.log_interval == 0:
-            logger.log(imitation_info, "offline_agent", step=log_step)
+            logger.log(imitation_info, "il_agent", step=log_step)
         
         # saving
         if FLAGS.save_interval > 0 and i % FLAGS.save_interval == 0:
