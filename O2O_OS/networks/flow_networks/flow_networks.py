@@ -3,7 +3,7 @@ from typing import Any, Optional, Sequence
 import distrax
 import flax.linen as nn
 import jax.numpy as jnp
-
+import jax
 
 def default_init(scale=1.0):
     """Default kernel initializer."""
@@ -193,8 +193,10 @@ class Value(nn.Module):
         value_net = mlp_class((*self.hidden_dims, 1), activate_final=False, layer_norm=self.layer_norm)
 
         self.value_net = value_net
+        self.single_mlp = MLP((*self.hidden_dims, 1), activate_final=False, layer_norm=self.layer_norm)
 
-    def __call__(self, observations, actions=None):
+
+    def __call__(self, observations, actions=None, single_value=False):
         """Return values or critic values.
 
         Args:
@@ -209,7 +211,12 @@ class Value(nn.Module):
             inputs.append(actions)
         inputs = jnp.concatenate(inputs, axis=-1)
 
-        v = self.value_net(inputs).squeeze(-1)
+        if single_value:
+            first_net_params = jax.tree_util.tree_map(lambda x: x[0], self.value_net.variables['params'])
+            v = self.single_mlp.apply({'params': first_net_params}, inputs).squeeze(-1)
+
+        else:
+            v = self.value_net(inputs).squeeze(-1)
 
         return v
 
