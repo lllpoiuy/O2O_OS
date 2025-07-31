@@ -1,6 +1,8 @@
 import d4rl
 import gymnasium
 import numpy as np
+import shimmy
+import gym
 
 from envs.env_utils import EpisodeMonitor
 from utils.datasets import Dataset
@@ -23,7 +25,8 @@ def get_dataset(
         env: Environment instance.
         env_name: Name of the environment.
     """
-    dataset = d4rl.qlearning_dataset(env)
+    gym_env = gym.make(env_name)
+    dataset = d4rl.qlearning_dataset(gym_env)
 
     terminals = np.zeros_like(dataset['rewards'])  # Indicate the end of an episode.
     masks = np.zeros_like(dataset['rewards'])  # Indicate whether we should bootstrap from the next state.

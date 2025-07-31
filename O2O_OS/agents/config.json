@@ -36,9 +36,9 @@
 
     "sample_actions":{
         "type": "distill_ddpg",
-        "actor_num_samples": 32,
+        "actor_num_samples": 16,
         "soft_max": true,
-        "imitation_boostrapped": true
+        "imitation_boostrapped": false
     },
     
     "create_network": {

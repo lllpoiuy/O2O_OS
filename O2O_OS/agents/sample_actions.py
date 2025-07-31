@@ -46,7 +46,7 @@ def compute_flow_actions(
 def sample_best_of_n(
         agent : flax.struct.PyTreeNode,
         observations : dict,
-        rng : dict,
+        rng : dict
     ) -> tuple:
 
     """
@@ -175,6 +175,9 @@ def sample_distill_ddpg(
         # print("q_actions.shape:", q_actions.shape)
         # print("imitation_actions.shape:", imitation_actions.shape)
         # print("actions.shape:", actions.shape)
+
+        q_imitation = jnp.squeeze(q_imitation, axis=-1)
+        imitation_actions = jnp.squeeze(imitation_actions, axis=-2)
 
         q_actions = jnp.where(
             jnp.expand_dims(q_imitation, axis=-1) > jnp.expand_dims(q_actions, axis=-1),
