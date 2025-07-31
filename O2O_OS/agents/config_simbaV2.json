@@ -1,0 +1,61 @@
+{
+    "agent_name" : "sac_bc",
+    "lr" : 0.0003,
+    "batch_size" : 256,
+    "discount": 0.99,
+    "tau": 0.005,
+    "target_update_interval": 1,
+    "horizon_length": null,
+    "RSNorm": true,
+
+    "actor_network": {
+        "actor_type": "MLP",
+        "actor_layer_norm": false,
+        "actor_hidden_dims": [512, 512, 512, 512]
+    },
+    
+    "critic_network": {
+        "critic_type": "simbaV2",
+        "critic_layer_norm": true,
+        "critic_num_blocks": 3,
+        "critic_hidden_dim": 512,
+        "critic_scaler_init": 0.0625,
+        "critic_scaler_scale": 0.0625,
+        "alpha_init": 0.25,
+        "alpha_scale": 0.0442,
+        "c_shift": 3.0,
+        "num_bins": 101,
+        "min_v": -5.0,
+        "max_v": 5.0,
+        "num_qs": 10
+    },
+    
+
+    "actor_loss": {
+        "type": "flow_bc",
+        "alpha": 100.0,
+        "OBAC": 10.0
+    },
+
+    "critic_loss": {
+        "type": "sac",
+        "q_agg": "mean",
+        "cql": null
+    },
+
+    "sample_actions":{
+        "type": "distill_ddpg",
+        "actor_num_samples": 32,
+        "soft_max": true,
+        "imitation_boostrapped": true
+    },
+    
+    "create_network": {
+        "type": "flow",
+        "flow_steps": 10,
+        "use_fourier_features": false,
+        "fourier_feature_dim": 64
+    },
+
+    "encoder" : null
+}

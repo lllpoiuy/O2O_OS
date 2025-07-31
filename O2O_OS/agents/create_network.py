@@ -61,13 +61,21 @@ def create_normal_network(
         critic_cls = partial(StateActionValue, base_cls=critic_base_cls)
         critic_def = Ensemble(critic_cls, num=config["critic_network"]["num_qs"])
     elif config["critic_network"]["critic_type"] == "simbaV2":
-        critic_base_cls = partial(
-            SimbaV2Critic, 
-            hidden_dim=config['value_hidden_dim'],
-            
+        critic_base_cls = None
+        critic_cls = partial(
+            SimbaV2Critic,
+            num_blocks=config["critic_network"]["critic_num_blocks"],
+            hidden_dim=config["critic_network"]["critic_hidden_dim"],
+            scaler_init=config["critic_network"]["critic_scaler_init"],
+            scalar_scale=config["critic_network"]["critic_scaler_scale"],
+            alpha_init=config["critic_network"]["alpha_init"],
+            alpha_scale=config["critic_network"]["alpha_scale"],
+            c_shift=config["critic_network"]["c_shift"],
+            num_bins=config["critic_network"]["num_bins"],
+            min_v=config["critic_network"]["min_v"],
+            max_v=config["critic_network"]["max_v"],
         )
-        critic_cls = None
-        critic_def = None
+        critic_def = Ensemble(critic_cls, num=config["critic_network"]["num_qs"])
         
 
     # actor network
@@ -75,7 +83,9 @@ def create_normal_network(
         actor_base_cls = partial(MLP, hidden_dims=config["actor_network"]["actor_hidden_dims"], activate_final=True)
         actor_def = TanhNormal(actor_base_cls, full_action_dim)
     elif config["actor_network"]['actor_type'] == "simbaV2":
-        actor_base_cls = None
+        actor_base_cls = partial(
+            
+        )
         actor_def = None
         
 
