@@ -36,9 +36,10 @@ flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "m
 flags.DEFINE_integer('imitation_steps', 300000, 'Number of imitation steps.')
 flags.DEFINE_integer('offline_steps', 0, 'Number of offline steps.')
 flags.DEFINE_integer('online_steps', 250000, 'Number of online steps.')
+
 flags.DEFINE_integer('start_training_steps', 20000, 'when does training start')
-flags.DEFINE_integer('offline_warmup_steps', 100000, 'when does actor training start')
-flags.DEFINE_integer('online_warmup_steps', 20000, 'when does actor training start')
+flags.DEFINE_integer('offline_warmup_steps', 0, 'when does actor training start')  # [*100000, 0]
+flags.DEFINE_integer('online_warmup_steps', 0, 'when does actor training start')  # [*20000, 0]
 
 
 
@@ -161,9 +162,7 @@ def main(_):
         config,
     )
     
-    # print(f"---What!?---, config['RSNorm']={config['RSNorm']}")
-    if config['RSNorm']:
-        # print(f"---What!?---, config['RSNorm']={config['RSNorm']}")
+    if config['RSNorm']:  # [NOTE] RSNorm
         obs_shape = example_batch['observations'].shape
         agent = NormalizedAgent.create(
             agent=agent,
@@ -275,6 +274,9 @@ def main(_):
             train_dataset = process_train_dataset(train_dataset)
 
         batch = train_dataset.sample_sequence(config['batch_size'], sequence_length=FLAGS.horizon_length, discount=discount)
+
+        if config['RSNorm']:  # [NOTE] RSNorm
+            agent.obs_rms.update(batch['observations'])
 
         if i <= FLAGS.offline_warmup_steps:
             agent, offline_info = agent.warmup_update(batch)

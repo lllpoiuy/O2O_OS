@@ -1,6 +1,7 @@
 import flax
 import jax
 import jax.numpy as jnp
+from agents.wrappers.normalization import NormalizedAgent
 
 
 def sample_dist(
@@ -30,6 +31,9 @@ def compute_flow_actions(
     noises,
 ):
     """Compute actions from the BC flow model using the Euler method."""
+    
+    if isinstance(agent, NormalizedAgent):
+        agent = agent.agent
     if agent.config['encoder'] is not None:
         observations = agent.network.select('actor_bc_flow_encoder')(observations)
     actions = noises
@@ -169,13 +173,15 @@ def sample_distill_ddpg(
         else:
             q_imitation = q_imitation.min(axis=0)
 
-        q_imitation = jnp.squeeze(q_imitation, axis=-1)
-        imitation_actions = jnp.squeeze(imitation_actions, axis=-2)
 
         # print("q_imitation.shape:", q_imitation.shape)
         # print("q_actions.shape:", q_actions.shape)
         # print("imitation_actions.shape:", imitation_actions.shape)
         # print("actions.shape:", actions.shape)
+
+        q_imitation = jnp.squeeze(q_imitation, axis=-1)
+        imitation_actions = jnp.squeeze(imitation_actions, axis=-2)
+
 
         q_actions = jnp.where(
             jnp.expand_dims(q_imitation, axis=-1) > jnp.expand_dims(q_actions, axis=-1),

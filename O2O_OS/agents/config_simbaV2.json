@@ -15,10 +15,19 @@
     },
     
     "critic_network": {
-        "critic_type": "MLP",
+        "critic_type": "simbaV2",
         "critic_layer_norm": true,
-        "num_qs": 10,
-        "value_hidden_dims": [512, 512, 512, 512]
+        "critic_num_blocks": 3,
+        "critic_hidden_dim": 512,
+        "critic_scaler_init": 0.0625,
+        "critic_scaler_scale": 0.0625,
+        "alpha_init": 0.25,
+        "alpha_scale": 0.0442,
+        "c_shift": 3.0,
+        "num_bins": 101,
+        "min_v": -5.0,
+        "max_v": 5.0,
+        "num_qs": 10
     },
     
 
@@ -31,15 +40,14 @@
     "critic_loss": {
         "type": "sac",
         "q_agg": "mean",
-        "td_target" : "single",
         "cql": null
     },
 
     "sample_actions":{
         "type": "distill_ddpg",
-        "actor_num_samples": 16,
+        "actor_num_samples": 32,
         "soft_max": true,
-        "imitation_boostrapped": false
+        "imitation_boostrapped": true
     },
     
     "create_network": {
