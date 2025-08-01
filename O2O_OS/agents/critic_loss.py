@@ -16,6 +16,7 @@ def critic_loss(
     Example config:
     "critic_loss": {
         "type": "sac",
+        "a_next": "BFN / base",
         "q_agg": "mean",
         "td_target" : "single / double / mean / min",
         "cql": {
@@ -40,10 +41,19 @@ def critic_loss(
 
     rng, sample_rng = jax.random.split(rng)
 
-    next_actions = agent.sample_actions(batch['next_observations'][..., -1, :], rng=sample_rng)
-    next_actions = jax.lax.stop_gradient(next_actions)
-
-    next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], next_actions)
+    if critic_loss_config['a_next'] == 'BFN':
+        next_actions = agent.sample_actions(batch['next_observations'][..., -1, :], rng=sample_rng)
+        next_actions = jax.lax.stop_gradient(next_actions)
+        next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], next_actions)
+    elif critic_loss_config['a_next'] == 'base':
+        from evaluation import sample_base_policy
+        base_actions = sample_base_policy(rng, agent, batch['next_observations'][..., -1, :])
+        # print(f"base_actions.shape = {base_actions.shape}")  # base_actions.shape = (256, 1, 25)
+        base_actions = jnp.squeeze(base_actions, axis=1)
+        base_actions = jax.lax.stop_gradient(base_actions)
+        next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], base_actions)
+    else:
+        raise ValueError(f"Unknown a_next: {critic_loss_config['a_next']}")        
 
     if critic_loss_config['td_target'] == 'min':
         next_q = next_qs.min(axis=0)
