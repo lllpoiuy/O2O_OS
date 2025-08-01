@@ -418,7 +418,7 @@ def main(_):
             ob = next_ob
 
         if i >= FLAGS.start_training_steps:
-            if FLAGS.replay_type == "·":
+            if FLAGS.replay_type == "portional":
                 
                 dataset_batch = train_dataset.sample_sequence(config['batch_size'] // 2 * FLAGS.utd_ratio, sequence_length=FLAGS.horizon_length, discount=discount)
                 replay_batch = replay_buffer.sample_sequence(FLAGS.utd_ratio * config['batch_size'] // 2, sequence_length=FLAGS.horizon_length, discount=discount)
