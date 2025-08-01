@@ -65,18 +65,20 @@ def get_flag_dict():
 
 def setup_swanlab(
     entity=None,
-    project='project',
+    project='rainbow',
+    workspace='TeaLab',
     group=None,
     name=None,
     mode='online',
 ):
-    """Set up Weights & Biases for logging."""
+    """Set up Swanlab for logging."""
     swanlab_output_dir = tempfile.mkdtemp()
     tags = [group] if group is not None else None
 
     init_kwargs = dict(
         config=get_flag_dict(),
         project=project,
+        workspace=workspace,
         entity=entity,
         tags=tags,
         group=group,

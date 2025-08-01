@@ -233,7 +233,7 @@ import json
 
 def get_config():
     print("getting config...")
-    with open('./agents/config.json', 'r') as f:
+    with open('./agents/configs/config.json', 'r') as f:
         config_dict = json.load(f)
     print("Loaded config:", config_dict)
     config = ml_collections.ConfigDict(config_dict)

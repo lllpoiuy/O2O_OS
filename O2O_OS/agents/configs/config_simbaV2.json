@@ -32,9 +32,12 @@
     
 
     "actor_loss": {
-        "type": "flow_bc",
-        "alpha": 100.0,
-        "OBAC": 10.0
+        "type": "sac_bc",
+        "target_entropy": null,
+        "target_entropy_multiplier": 1.0,
+        "alpha": 1.0,
+        "bc_alpha": 0.0,
+        "init_temp": 1.0
     },
 
     "critic_loss": {
@@ -51,10 +54,7 @@
     },
     
     "create_network": {
-        "type": "flow",
-        "flow_steps": 10,
-        "use_fourier_features": false,
-        "fourier_feature_dim": 64
+        "type": "normal"
     },
 
     "encoder" : null

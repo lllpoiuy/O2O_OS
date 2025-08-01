@@ -67,6 +67,11 @@ flags.DEFINE_bool('sparse', False, "make the task sparse reward")
 
 flags.DEFINE_bool('save_all_online_states', False, "save all trajectories to npy")
 
+flags.DEFINE_string('logging_mode', 'online', 'Logging mode: "online" or "offline" or "disabled".')
+flags.DEFINE_string('project', 'rainbow', 'Swanlab project name.')
+flags.DEFINE_string('workspace', 'TeaLab', 'Swanlab workspace name.')
+
+
 class LoggingHelper:
     def __init__(self, csv_loggers, swanlab_logger):
         self.csv_loggers = csv_loggers
@@ -81,8 +86,8 @@ class LoggingHelper:
 
 def main(_):
     exp_name = get_exp_name(FLAGS.seed)
-    run = setup_swanlab(project='rainbow', group=FLAGS.run_group, name=exp_name)
-    
+    run = setup_swanlab(project=FLAGS.project, workspace=FLAGS.workspace, group=FLAGS.run_group, name=exp_name, mode=FLAGS.logging_mode)
+
     FLAGS.save_dir = os.path.join(FLAGS.save_dir, FLAGS.run_group, FLAGS.env_name, exp_name)
     os.makedirs(FLAGS.save_dir, exist_ok=True)
     flag_dict = get_flag_dict()
