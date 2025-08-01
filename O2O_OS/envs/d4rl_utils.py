@@ -3,6 +3,7 @@ import gymnasium
 import numpy as np
 import shimmy
 import gym
+import envs.d4rl_binary
 
 from envs.env_utils import EpisodeMonitor
 from utils.datasets import Dataset
