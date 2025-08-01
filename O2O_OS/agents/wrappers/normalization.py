@@ -25,6 +25,7 @@ class NormalizedAgent(flax.struct.PyTreeNode):
     agent: Any
     obs_rms: Any = nonpytree_field()  # running mean/var not traced by JAX
     epsilon: float = nonpytree_field()
+    config: Any = nonpytree_field()
     
     def __hash__(self):
         # Use object identity hash as a fallback to avoid hashing JAX arrays
@@ -37,7 +38,7 @@ class NormalizedAgent(flax.struct.PyTreeNode):
         """
         # Initialize RunningMeanStd with zeros/ones
         rms = RunningMeanStd(shape=obs_shape)
-        return cls(agent=agent, obs_rms=rms, epsilon=epsilon)
+        return cls(agent=agent, obs_rms=rms, epsilon=epsilon, config=agent.config,)
 
     def _normalize(self, obs: jnp.ndarray) -> jnp.ndarray:
         """Normalize observations: (obs - mean) / sqrt(var + epsilon)."""

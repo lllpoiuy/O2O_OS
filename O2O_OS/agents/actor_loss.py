@@ -102,7 +102,7 @@ def bc_flow(
             (batch_size, agent.config["horizon_length"], agent.config["action_dim"]) 
         ) * batch["valid"][..., None]
     
-    q_batch = agent.network.select('critic')(batch['observations'], actions=batch_actions)
+    q_batch = agent.network.select('critic')(batch['observations'], batch_actions)
 
     obac_rate = None
 
@@ -115,7 +115,7 @@ def bc_flow(
             rng=n_rng,
         )
         now_action = jnp.clip(now_action, -1 + 1e-5, 1 - 1e-5)
-        q_now = agent.network.select('critic')(batch['observations'], actions=now_action)
+        q_now = agent.network.select('critic')(batch['observations'], now_action)
 
         if agent.config['critic_loss']['q_agg'] == 'mean':
             q_batch = jnp.mean(q_batch, axis=0)
@@ -147,7 +147,7 @@ def bc_flow(
         # Q loss.
         actor_actions = jnp.clip(actor_actions, -1, 1)
 
-        qs = agent.network.select(f'critic')(batch['observations'], actions=actor_actions)
+        qs = agent.network.select(f'critic')(batch['observations'], actor_actions)
         q = jnp.mean(qs, axis=0)
         q_loss = -q.mean()
 

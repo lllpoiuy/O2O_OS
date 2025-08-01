@@ -67,7 +67,7 @@ def create_normal_network(
             num_blocks=config["critic_network"]["critic_num_blocks"],
             hidden_dim=config["critic_network"]["critic_hidden_dim"],
             scaler_init=config["critic_network"]["critic_scaler_init"],
-            scalar_scale=config["critic_network"]["critic_scaler_scale"],
+            scaler_scale=config["critic_network"]["critic_scaler_scale"],
             alpha_init=config["critic_network"]["alpha_init"],
             alpha_scale=config["critic_network"]["alpha_scale"],
             c_shift=config["critic_network"]["c_shift"],
@@ -83,10 +83,9 @@ def create_normal_network(
         actor_base_cls = partial(MLP, hidden_dims=config["actor_network"]["actor_hidden_dims"], activate_final=True)
         actor_def = TanhNormal(actor_base_cls, full_action_dim)
     elif config["actor_network"]['actor_type'] == "simbaV2":
-        actor_base_cls = partial(
-            
-        )
+        actor_base_cls = None
         actor_def = None
+        raise NotImplementedError
         
 
     # Define the dual alpha variable.
@@ -153,12 +152,28 @@ def create_flow_network(
         encoders['actor_onestep_flow'] = encoder_module()
 
     # Define networks.
-    critic_def = Value(
-        hidden_dims=config["critic_network"]['value_hidden_dims'],
-        layer_norm=config["critic_network"]['critic_layer_norm'],
-        num_ensembles=config["critic_network"]['num_qs'],
-        encoder=encoders.get('critic'),
-    )
+    if config["critic_network"]["critic_type"] == "MLP":
+        critic_def = Value(
+            hidden_dims=config["critic_network"]['value_hidden_dims'],
+            layer_norm=config["critic_network"]['critic_layer_norm'],
+            num_ensembles=config["critic_network"]['num_qs'],
+            encoder=encoders.get('critic'),
+        )
+    elif config["critic_network"]["critic_type"] == "simbaV2":
+        critic_cls = partial(
+            SimbaV2Critic,
+            num_blocks=config["critic_network"]["critic_num_blocks"],
+            hidden_dim=config["critic_network"]["critic_hidden_dim"],
+            scaler_init=config["critic_network"]["critic_scaler_init"],
+            scaler_scale=config["critic_network"]["critic_scaler_scale"],
+            alpha_init=config["critic_network"]["alpha_init"],
+            alpha_scale=config["critic_network"]["alpha_scale"],
+            c_shift=config["critic_network"]["c_shift"],
+            num_bins=config["critic_network"]["num_bins"],
+            min_v=config["critic_network"]["min_v"],
+            max_v=config["critic_network"]["max_v"],
+        )
+        critic_def = Ensemble(critic_cls, num=config["critic_network"]["num_qs"])
 
     actor_bc_flow_def = ActorVectorField(
         hidden_dims=config['actor_network']['actor_hidden_dims'],

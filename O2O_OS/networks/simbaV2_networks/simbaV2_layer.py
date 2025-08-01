@@ -206,8 +206,8 @@ class HyperCategoricalValue(nn.Module):  # [NOTE] Distributional Critic, SimBaV2
         value = self.w2(value) + self.bias
 
         # return log probability of bins
-        log_prob = nn.log_softmax(value, axis=1)
-        value = jnp.sum(jnp.exp(log_prob) * self.bin_values, axis=1)
+        log_prob = nn.log_softmax(value, axis=-1)
+        value = jnp.sum(jnp.exp(log_prob) * self.bin_values, axis=-1)
 
         info = {"log_prob": log_prob}
         return value, info

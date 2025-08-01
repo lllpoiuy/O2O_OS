@@ -110,7 +110,8 @@ class SimbaV2Critic(nn.Module):
         observations: jnp.ndarray,
         actions: jnp.ndarray,
     ) -> jnp.ndarray:
-        x = jnp.concatenate((observations, actions), axis=1)
+        # print(f"SimbaV2Critic: observations.shape={observations.shape}, actions.shape={actions.shape}")
+        x = jnp.concatenate((observations, actions), axis=-1)
         y = self.embedder(x)
         z = self.encoder(y)
         q, info = self.predictor(z)
