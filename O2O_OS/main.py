@@ -48,7 +48,7 @@ flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 50000, 'Evaluation interval.')
 flags.DEFINE_integer('save_interval', -1, 'Save interval.')
 
-flags.DEFINE_integer('utd_ratio', 20, "update to data ratio")
+flags.DEFINE_integer('utd_ratio', 2, "update to data ratio")
 
 flags.DEFINE_float('discount', 0.99, 'discount factor')
 
@@ -418,7 +418,7 @@ def main(_):
             ob = next_ob
 
         if i >= FLAGS.start_training_steps:
-            if FLAGS.replay_type == "portional":
+            if FLAGS.replay_type == "·":
                 
                 dataset_batch = train_dataset.sample_sequence(config['batch_size'] // 2 * FLAGS.utd_ratio, sequence_length=FLAGS.horizon_length, discount=discount)
                 replay_batch = replay_buffer.sample_sequence(FLAGS.utd_ratio * config['batch_size'] // 2, sequence_length=FLAGS.horizon_length, discount=discount)
