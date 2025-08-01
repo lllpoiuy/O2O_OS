@@ -1,5 +1,12 @@
-import gym
-import d4rl
+import gym, d4rl
+import envs.d4rl_binary
+
+env = gym.make('door-binary-v0')
+dataset = d4rl.qlearning_dataset(env)
+
+env = gym.make('relocate-binary-v0')
+dataset = d4rl.qlearning_dataset(env)
+
 import gymnasium
 import shimmy
 gym_env = gym.make("relocate-human-v1")

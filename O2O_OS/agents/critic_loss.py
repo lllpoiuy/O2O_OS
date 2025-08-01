@@ -17,6 +17,7 @@ def critic_loss(
     "critic_loss": {
         "type": "sac",
         "q_agg": "mean",
+        "td_target" : "single / double / mean / min",
         "cql": {
             "cql_n_actions": 10,
             "cql_temperature": 1,
@@ -44,10 +45,18 @@ def critic_loss(
 
     next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], next_actions)
 
-    if critic_loss_config['q_agg'] == 'min':
+    if critic_loss_config['td_target'] == 'min':
         next_q = next_qs.min(axis=0)
-    else:
+    elif critic_loss_config['td_target'] == 'mean':
         next_q = next_qs.mean(axis=0)
+    elif critic_loss_config['td_target'] == 'single':
+        idx = jax.random.randint(rng, (), 0, next_qs.shape[0])
+        next_q = next_qs[idx]
+    elif critic_loss_config['td_target'] == 'double':
+        idx = jax.random.choice(rng, next_qs.shape[0], (2,), replace=False)
+        next_q = jnp.minimum(next_qs[idx[0]], next_qs[idx[1]])
+    else:
+        raise ValueError(f"Unknown td_target: {critic_loss_config['td_target']}")
 
     target_q = batch['rewards'][..., -1] + (agent.config['discount'] ** agent.config["horizon_length"]) * batch['masks'][..., -1] * next_q
     

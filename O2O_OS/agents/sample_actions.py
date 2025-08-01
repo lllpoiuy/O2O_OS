@@ -137,17 +137,18 @@ def sample_distill_ddpg(
     actions = agent.network.select('actor_onestep_flow')(observations_repeated, noises)
     actions = jnp.clip(actions, -1, 1)
     
-    if agent.config["critic_loss"]["q_agg"] == "mean":
-        q = agent.network.select("critic")(observations_repeated, actions).mean(axis=0)
-    else:
-        q = agent.network.select("critic")(observations_repeated, actions).min(axis=0)
+    # if agent.config["critic_loss"]["q_agg"] == "mean":
+    #     q = agent.network.select("critic")(observations_repeated, actions).mean(axis=0)
+    # else:
+    #     q = agent.network.select("critic")(observations_repeated, actions).min(axis=0)
+    q = agent.network.select("critic")(observations_repeated, actions, single_value=True)
     
     if agent.config['sample_actions'].get('soft_max', False):
         q = jax.nn.softmax(q, axis=-1)
         indices = jax.random.categorical(rng, q, axis=-1)
     else:
         indices = jnp.argmax(q, axis=-1)
-    
+
     bshape = indices.shape
     indices = indices.reshape(-1)
     bsize = len(indices)
@@ -172,13 +173,15 @@ def sample_distill_ddpg(
         else:
             q_imitation = q_imitation.min(axis=0)
 
-        # print("---q_imitation.shape:", q_imitation.shape)
-        # print("---q_actions.shape:", q_actions.shape)
-        # print("---imitation_actions.shape:", imitation_actions.shape)
-        # print("---actions.shape:", actions.shape)
-        
+
+        # print("q_imitation.shape:", q_imitation.shape)
+        # print("q_actions.shape:", q_actions.shape)
+        # print("imitation_actions.shape:", imitation_actions.shape)
+        # print("actions.shape:", actions.shape)
+
         q_imitation = jnp.squeeze(q_imitation, axis=-1)
         imitation_actions = jnp.squeeze(imitation_actions, axis=-2)
+
 
         q_actions = jnp.where(
             jnp.expand_dims(q_imitation, axis=-1) > jnp.expand_dims(q_actions, axis=-1),

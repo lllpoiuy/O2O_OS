@@ -31,6 +31,7 @@
     "critic_loss": {
         "type": "sac",
         "q_agg": "mean",
+        "td_target" : "single",
         "cql": null
     },
 
