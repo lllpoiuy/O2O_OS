@@ -6,29 +6,43 @@ class DoorBinaryEnv(DoorEnvV0):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     
-    def compute_reward(self, action, obs):
-        # Override to give reward = 1.0 only if door is fully open
-        if self.task_success():
-            return 0.0
-        return -1.0
+    def step(self, action):
+        observation, reward, terminated, truncated = super().step(action)
+        if truncated['goal_achieved']:
+            reward = 0.0
+        else:
+            reward = -1.0
+        return observation, reward, terminated, truncated
     
     def get_dataset(self):
         origin_env = gym.make('door-human-v0') 
         return d4rl.qlearning_dataset(origin_env)
 
+    def get_normalized_score(self, score):
+        """Return normalized score between 0 and 1"""
+        return 1.0 + score/100.0  # Normalized to [0, 1]
+
+
 class RelocateBinaryEnv(DoorEnvV0):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     
-    def compute_reward(self, action, obs):
-        # Override to give reward = 1.0 only if object is relocated successfully
-        if self.task_success():
-            return 0.0
-        return -1.0
+    def step(self, action):
+        observation, reward, terminated, truncated = super().step(action)
+        if truncated['goal_achieved']:
+            reward = 0.0
+        else:
+            reward = -1.0
+        return observation, reward, terminated, truncated
 
     def get_dataset(self):
         origin_env = gym.make('relocate-human-v0')
         return d4rl.qlearning_dataset(origin_env)
+
+    def get_normalized_score(self, score):
+        """Return normalized score between 0 and 1"""
+        return 1.0 + score/100.0  # Normalized to [0, 1]
+
 
 register(
     id='relocate-binary-v0',

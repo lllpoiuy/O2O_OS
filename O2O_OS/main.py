@@ -33,7 +33,7 @@ flags.DEFINE_string('save_dir', '../exp/', 'Save directory.')
 
 flags.DEFINE_string('replay_type', 'mixed', 'Replay buffer type: "portional", "mixed", or "online_only".')
 
-flags.DEFINE_integer('imitation_steps', 300000, 'Number of imitation steps.')
+flags.DEFINE_integer('imitation_steps', 50000, 'Number of imitation steps.')
 flags.DEFINE_integer('offline_steps', 0, 'Number of offline steps.')
 flags.DEFINE_integer('online_steps', 250000, 'Number of online steps.')
 flags.DEFINE_integer('start_training_steps', 20000, 'when does training start')
