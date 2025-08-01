@@ -1,7 +1,6 @@
 import flax
 import jax
 import jax.numpy as jnp
-from evaluation import sample_base_policy
 
 # reshape issue: batch['valid]?
 
@@ -48,6 +47,7 @@ def critic_loss(
     if critic_loss_config['a_next'] == 'BFN':
         next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], next_actions)
     elif critic_loss_config['a_next'] == 'base':
+        from evaluation import sample_base_policy
         base_actions = sample_base_policy(rng, agent, batch['next_observations'][..., -1, :])
         next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], base_actions)
     else:

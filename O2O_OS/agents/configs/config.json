@@ -6,7 +6,7 @@
     "tau": 0.005,
     "target_update_interval": 1,
     "horizon_length": null,
-    "RSNorm": true,
+    "RSNorm": false,
 
     "actor_network": {
         "actor_type": "MLP",
