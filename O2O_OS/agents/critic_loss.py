@@ -1,6 +1,7 @@
 import flax
 import jax
 import jax.numpy as jnp
+from evaluation import sample_base_policy
 
 # reshape issue: batch['valid]?
 
@@ -16,6 +17,7 @@ def critic_loss(
     Example config:
     "critic_loss": {
         "type": "sac",
+        "a_next": "BFN / base",
         "q_agg": "mean",
         "td_target" : "single / double / mean / min",
         "cql": {
@@ -43,7 +45,13 @@ def critic_loss(
     next_actions = agent.sample_actions(batch['next_observations'][..., -1, :], rng=sample_rng)
     next_actions = jax.lax.stop_gradient(next_actions)
 
-    next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], next_actions)
+    if critic_loss_config['a_next'] == 'BFN':
+        next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], next_actions)
+    elif critic_loss_config['a_next'] == 'base':
+        base_actions = sample_base_policy(rng, agent, batch['next_observations'][..., -1, :])
+        next_qs = agent.network.select('target_critic')(batch['next_observations'][..., -1, :], base_actions)
+    else:
+        raise ValueError(f"Unknown a_next: {critic_loss_config['a_next']}")        
 
     if critic_loss_config['td_target'] == 'min':
         next_q = next_qs.min(axis=0)
