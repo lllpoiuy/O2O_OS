@@ -109,6 +109,7 @@ class SimbaV2Critic(nn.Module):
         self,
         observations: jnp.ndarray,
         actions: jnp.ndarray,
+        single_value=False,  # TODO: my implementation is quite different from `classValue(nn.Module)` in the qc codebase
     ) -> jnp.ndarray:
         # print(f"SimbaV2Critic: observations.shape={observations.shape}, actions.shape={actions.shape}")
         x = jnp.concatenate((observations, actions), axis=-1)

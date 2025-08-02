@@ -137,11 +137,14 @@ def sample_distill_ddpg(
     actions = agent.network.select('actor_onestep_flow')(observations_repeated, noises)
     actions = jnp.clip(actions, -1, 1)
     
-    # if agent.config["critic_loss"]["q_agg"] == "mean":
-    #     q = agent.network.select("critic")(observations_repeated, actions).mean(axis=0)
-    # else:
-    #     q = agent.network.select("critic")(observations_repeated, actions).min(axis=0)
-    q = agent.network.select("critic")(observations_repeated, actions, single_value=True)
+    if agent.config["critic_loss"]["q_agg"] == "mean":
+        q = agent.network.select("critic")(observations_repeated, actions).mean(axis=0)
+    elif agent.config["critic_loss"]["q_agg"] == "min":
+        q = agent.network.select("critic")(observations_repeated, actions).min(axis=0)
+    elif agent.config["critic_loss"]["q_agg"] == "single":
+        q = agent.network.select("critic")(observations_repeated, actions, single_value=True)
+    else:
+        raise ValueError(f"Unknown q_agg: {agent.config['critic_loss']['q_agg']}")
     
     if agent.config['sample_actions'].get('soft_max', False):
         q = jax.nn.softmax(q, axis=-1)

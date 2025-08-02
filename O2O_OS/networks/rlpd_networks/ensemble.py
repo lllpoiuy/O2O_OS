@@ -10,7 +10,7 @@ class Ensemble(nn.Module):
     num: int = 2
 
     @nn.compact
-    def __call__(self, *args):
+    def __call__(self, *args, **kwargs):
         ensemble = nn.vmap(
             self.net_cls,
             variable_axes={"params": 0},
@@ -19,7 +19,7 @@ class Ensemble(nn.Module):
             out_axes=0,
             axis_size=self.num,
         )
-        return ensemble()(*args)
+        return ensemble()(*args, **kwargs)
 
 
 def subsample_ensemble(key: jax.random.PRNGKey, params, num_sample: int, num_qs: int):

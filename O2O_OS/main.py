@@ -42,7 +42,6 @@ flags.DEFINE_integer('offline_warmup_steps', 0, 'when does actor training start'
 flags.DEFINE_integer('online_warmup_steps', 0, 'when does actor training start')  # [*20000, 0]
 
 
-
 flags.DEFINE_integer('buffer_size', 200000, 'Replay buffer size.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 50000, 'Evaluation interval.')
@@ -325,14 +324,14 @@ def main(_):
                 logger.log(eval_info, "eval_basePolicy", step=log_step)
 
     # transition from offline to online
-    if FLAGS.replay_type == "portional":
+    if FLAGS.replay_type == "portional" or "online_only":
         replay_buffer = ReplayBuffer.create(example_batch, size=FLAGS.buffer_size)
     elif FLAGS.replay_type == "mixed":
         replay_buffer = ReplayBuffer.create_from_initial_dataset(
             dict(train_dataset), size=max(FLAGS.buffer_size, train_dataset.size + 1)
         )
-    elif FLAGS.replay_type == "online_only":
-        replay_buffer = ReplayBuffer.create(example_batch, size=FLAGS.buffer_size)
+    else:
+        raise ValueError(f"Unknown replay type: {FLAGS.replay_type}")
 
 
 
@@ -472,6 +471,7 @@ def main(_):
         if FLAGS.save_interval > 0 and i % FLAGS.save_interval == 0:
             save_agent(agent, FLAGS.save_dir, log_step)
 
+        # replace dataset
         if FLAGS.replay_type == "portional" and FLAGS.ogbench_dataset_dir is not None and FLAGS.dataset_replace_interval != 0 and i % FLAGS.dataset_replace_interval == 0:
             dataset_idx = (dataset_idx + 1) % len(dataset_paths)
             print(f"Using new dataset: {dataset_paths[dataset_idx]}", flush=True)
