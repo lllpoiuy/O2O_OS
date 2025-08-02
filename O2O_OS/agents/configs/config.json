@@ -1,6 +1,6 @@
 {
     "agent_name" : "sac_bc",
-    "lr" : 0.0003,
+    "lr" : 3e-4,
     "batch_size" : 256,
     "discount": 0.99,
     "tau": 0.005,
@@ -30,7 +30,7 @@
 
     "critic_loss": {
         "type": "sac",
-        "a_next": "base",
+        "a_next": "BFN",
         "q_agg": "mean",
         "td_target" : "single",
         "cql": null

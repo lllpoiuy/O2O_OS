@@ -218,8 +218,11 @@ def main(_):
             train_dataset = process_train_dataset(train_dataset)
 
         batch = train_dataset.sample_sequence(config['batch_size'], sequence_length=FLAGS.horizon_length, discount=discount)
+        
+        if config['RSNorm']:  # [NOTE] RSNorm
+            agent.obs_rms.update(batch['observations'])
 
-        agent, imitation_info = agent.imitation_update(batch)
+        agent, imitation_info = agent.imitation_update(batch)  # [TODO] IL doesn't support RSNorm yet
 
         if i % FLAGS.log_interval == 0:
             logger.log(imitation_info, "il_agent", step=log_step)
