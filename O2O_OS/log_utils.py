@@ -60,6 +60,34 @@ def get_flag_dict():
     for k in flag_dict:
         if isinstance(flag_dict[k], ml_collections.ConfigDict):
             flag_dict[k] = flag_dict[k].to_dict()
+    
+    # Add meta info
+    import os
+    import sys
+    import shlex
+    import subprocess
+    
+    def get_git_commit():
+        try:
+            full_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
+            short_hash = full_hash[-7:]
+            return short_hash, full_hash
+        except Exception:
+            return 'Not a git repo or git not available'
+
+    def is_git_dirty():
+        try:
+            status = subprocess.check_output(['git', 'status', '--porcelain']).decode('ascii').strip()
+            return bool(status)
+        except Exception:
+            return None
+        
+    flag_dict['cuda_visible_devices'] = os.environ.get("CUDA_VISIBLE_DEVICES", "Not Set")
+    flag_dict['execution_command'] = "python " + " ".join([shlex.quote(arg) for arg in sys.argv])
+    flag_dict['cwd'] = os.getcwd()
+    flag_dict['git_commit'], flag_dict['git_commit_full'] = get_git_commit()
+    flag_dict['git_dirty'] = is_git_dirty()
+    
     return flag_dict
 
 
@@ -92,34 +120,7 @@ def setup_swanlab(
     )
 
     run = swanlab.init(**init_kwargs)
-
-    # assume a flat structure
-    # swanlab.log_artifact(
-    #     path="./agents/config.json",
-    #     name="config"
-    # )
-    # swanlab.log_artifact(
-    #     path="./agents/create_network.py",
-    #     name="create_network"
-    # )
-    # swanlab.log_artifact(
-    #     path="./agents/actor_loss.py",
-    #     name="actor_loss"
-    # )
-    # swanlab.log_artifact(
-    #     path="./agents/sample_actions.py",
-    #     name="sample_actions"
-    # )
-    # swanlab.log_artifact(
-    #     path="./agents/agent.py",
-    #     name="agent"
-    # )
-    # swanlab.log_artifact(
-    #     path="./main.py",
-    #     name="main"
-    # )
-
-
+    
     return run
 
 
